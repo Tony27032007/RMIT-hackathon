@@ -1,0 +1,33 @@
+{
+  "realm": "homelocker",
+  "auth-server-url": "http://localhost:8080/",
+  "ssl-required": "external",
+  "resource": "homelocker-client",
+  "public-client": true,
+  "confidential-port": 0,
+  "jwk": {
+    "keys": [
+      {
+        "kid": "aPviDwFshHw5K5q-m7i9c2575EZhOU0-0r6AfFpXBg8",
+        "kty": "OKP",
+        "alg": "EdDSA",
+        "use": "sig",
+        "crv": "Ed25519",
+        "x": "jzu60QGYUntqZDPZ57Og6QH3XnyoxnWucbsQgv9E5FE"
+      }
+    ]
+  },
+  "backgroundUrl": "http://localhost:8080/realms/homelocker/tide-idp-resources/images/BACKGROUND_IMAGE",
+  "logoUrl": "http://localhost:8080/realms/homelocker/tide-idp-resources/images/LOGO",
+  "homeOrkUrl": "https://ork1.tideprotocol.com",
+  "vendorId": "fc25741a-bca2-4129-8574-de294e397f20",
+  "client-origin-auth-http://localhost:8080": "8sKBy6MrpXRutBPo4vPgOwk3FpPPMlGd2R4mMWQpxzqMaORMpruEM9FNIR8EvHsjGn6CWtIgAjOkrh+tSyI2Cg==",
+  "gVVK": "8F3BBAD10198527B6A6433D9E7B3A0E901F75E7CA8C675AE71BB1082FF44E451",
+  "vvkId": "fc25741a-bca2-4129-8574-de294e397f20",
+  "orkUrl": "https://ork1.tideprotocol.com",
+  "payerPublic": "200000b967a7799ffd4476e1074777ebc83bec23a3843cb2e5ca43c83561802c8e646b",
+  "obfGVVK": "8F3BBAD10198527B6A6433D9E7B3A0E901F75E7CA8C675AE71BB1082FF44E451",
+  "gVRKCertificate": "bGqBLMoG1pZLth3YO7bc/0e7rootFzp/cv0/lutlAVKdsoVlE3Tn8tAUqFNN4Y7LvDkUXb2n5UlTZYK+NoEZCQ==",
+  "thresholdT": 14,
+  "thresholdN": 20
+}

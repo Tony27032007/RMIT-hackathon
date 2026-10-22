@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { openDatabase } from "../db/database.mjs";
 import { createMembershipController } from "./membership-controller.mjs";
+import { createDeletionController } from "./deletion-controller.mjs";
 import { createViewController } from "./view-controller.mjs";
 
 function responseCapture() {
@@ -33,7 +34,10 @@ async function setup() {
     VALUES (?, ?, ?, ?, ?, ?, ?, 'available', ?, ?)
   `).run("recording-id", "repo-id", "guardian-1", "recordings/file-1", "clip.mp4", "video/mp4", 1024, now, now);
 
-  const storage = { async signDownload() { return "https://private-s3.example/recording"; } };
+  const storage = {
+    async statObject() { return { size: 1024 }; },
+    createReadStream() { throw new Error("Playback must remain behind the policy gate."); },
+  };
   return {
     db,
     memberships: createMembershipController({ db }),
@@ -41,106 +45,119 @@ async function setup() {
   };
 }
 
-test("membership is granted only after every guardian in the request snapshot approves", async () => {
+test("unanimous membership votes are audited but do not change authority before Tide policy is available", async () => {
   const { db, memberships } = await setup();
   try {
     const requested = responseCapture();
     memberships.requestMembership(null, requested, { sub: "new-guardian" }, "repo-id");
+    assert.equal(requested.status, 201);
     const requestId = requested.body.requestId;
 
-    const firstVote = responseCapture();
-    memberships.decideMembership(null, firstVote, { sub: "guardian-1" }, requestId, { decision: "approve" });
-    assert.equal(firstVote.body.status, "pending");
-    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM repository_members WHERE subject_id = 'new-guardian' AND status = 'active'").get().count, 0);
+    for (const subject of ["guardian-1", "guardian-2", "guardian-3"]) {
+      const decision = responseCapture();
+      memberships.decideMembership(
+        null,
+        decision,
+        { sub: subject },
+        requestId,
+        { decision: "approve" },
+      );
+      assert.equal(decision.body.status, subject === "guardian-3" ? "awaiting_tide_policy" : "pending");
+    }
 
-    const secondVote = responseCapture();
-    memberships.decideMembership(null, secondVote, { sub: "guardian-2" }, requestId, { decision: "approve" });
-    assert.equal(secondVote.body.status, "pending");
-
-    const thirdVote = responseCapture();
-    memberships.decideMembership(null, thirdVote, { sub: "guardian-3" }, requestId, { decision: "approve" });
-    assert.equal(thirdVote.body.status, "accepted");
-    assert.equal(db.prepare("SELECT status FROM repository_members WHERE subject_id = 'new-guardian'").get().status, "active");
-  } finally {
-    db.close();
-  }
-});
-
-test("a guardian leaving cancels pending requests and clears their recorded approvals", async () => {
-  const { db, memberships, views } = await setup();
-  try {
-    const membership = responseCapture();
-    memberships.requestMembership(null, membership, { sub: "new-guardian" }, "repo-id");
-    memberships.decideMembership(null, responseCapture(), { sub: "guardian-1" }, membership.body.requestId, { decision: "approve" });
-
-    const view = responseCapture();
-    views.requestView(null, view, { sub: "guardian-1" }, "recording-id");
-    views.decideView(null, responseCapture(), { sub: "guardian-2" }, view.body.requestId, { decision: "approve" });
-
-    memberships.leaveRepository(null, responseCapture(), { sub: "guardian-2" }, "repo-id");
-
-    const memberRequest = { ...db.prepare("SELECT status, cancellation_reason FROM membership_requests WHERE id = ?")
-      .get(membership.body.requestId) };
-    const viewRequest = { ...db.prepare("SELECT status, cancellation_reason FROM view_requests WHERE id = ?")
-      .get(view.body.requestId) };
-    assert.deepEqual(memberRequest, {
-      status: "cancelled",
-      cancellation_reason: "Request canceled due to guardian leaving",
-    });
-    assert.deepEqual(viewRequest, {
-      status: "cancelled",
-      cancellation_reason: "Request canceled due to guardian leaving",
-    });
-    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM membership_approvals WHERE request_id = ?").get(membership.body.requestId).count, 0);
-    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM view_approvals WHERE request_id = ?").get(view.body.requestId).count, 0);
-
-    const listedMembership = responseCapture();
-    memberships.listMembershipRequests(null, listedMembership, { sub: "guardian-1" }, "repo-id");
-    assert.equal(listedMembership.body.requests[0].cancellation_reason, "Request canceled due to guardian leaving");
-
-    const listedViews = responseCapture();
-    views.listRepositoryViewRequests(null, listedViews, { sub: "guardian-1" }, "repo-id");
-    assert.equal(listedViews.body.requests[0].cancellation_reason, "Request canceled due to guardian leaving");
-  } finally {
-    db.close();
-  }
-});
-
-test("a view link is returned only to the requester after every subscriber approves", async () => {
-  const { db, views } = await setup();
-  try {
-    const request = responseCapture();
-    views.requestView(null, request, { sub: "guardian-1" }, "recording-id");
-    const requestId = request.body.requestId;
-
-    views.decideView(null, responseCapture(), { sub: "guardian-2" }, requestId, { decision: "approve" });
-    views.decideView(null, responseCapture(), { sub: "guardian-3" }, requestId, { decision: "approve" });
-    assert.equal(db.prepare("SELECT status FROM view_requests WHERE id = ?").get(requestId).status, "pending");
-    views.decideView(null, responseCapture(), { sub: "guardian-1" }, requestId, { decision: "approve" });
-
-    const access = responseCapture();
-    await views.getApprovedView(null, access, { sub: "guardian-1" }, requestId);
-    assert.equal(access.body.expiresInSeconds, 300);
-    assert.equal(access.body.url, "https://private-s3.example/recording");
-
-    await assert.rejects(
-      views.getApprovedView(null, responseCapture(), { sub: "guardian-2" }, requestId),
-      (error) => error.status === 404,
+    const requestRow = db.prepare(
+      "SELECT status FROM membership_requests WHERE id = ?",
+    ).get(requestId);
+    assert.equal(requestRow.status, "pending");
+    assert.throws(
+      () => memberships.leaveRepository(null, responseCapture(), { sub: "guardian-2" }, "repo-id"),
+      (error) => error.status === 503 && /guardian-quorum/.test(error.message),
     );
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM repository_members WHERE status = 'active'").get().count, 3);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM membership_approvals").get().count, 3);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_events").get().count, 4);
   } finally {
     db.close();
   }
 });
 
-test("a sole subscriber still explicitly approves their own view request", async () => {
+test("view requests and guardian votes are tracked while plaintext access remains fail closed", async () => {
   const { db, views } = await setup();
+  let signedDownloads = 0;
+  const securedViews = createViewController({
+    db,
+    storage: {
+      async statObject() { signedDownloads += 1; return { size: 1024 }; },
+      createReadStream() { signedDownloads += 1; throw new Error("Unexpected stream."); },
+    },
+  });
   try {
-    db.prepare("DELETE FROM repository_members WHERE repository_id = ? AND subject_id != ?")
-      .run("repo-id", "guardian-1");
-    const request = responseCapture();
-    views.requestView(null, request, { sub: "guardian-1" }, "recording-id");
-    views.decideView(null, responseCapture(), { sub: "guardian-1" }, request.body.requestId, { decision: "approve" });
-    assert.equal(db.prepare("SELECT status FROM view_requests WHERE id = ?").get(request.body.requestId).status, "approved");
+    const requested = responseCapture();
+    views.requestView(null, requested, { sub: "guardian-1" }, "recording-id");
+    assert.equal(requested.status, 201);
+    const requestId = requested.body.requestId;
+    assert.equal(requested.body.requiredApprovals, 2);
+
+    for (const subject of ["guardian-2", "guardian-3"]) {
+      const decision = responseCapture();
+      views.decideView(
+        null,
+        decision,
+        { sub: subject },
+        requestId,
+        { decision: "approve" },
+      );
+      assert.equal(
+        decision.body.status,
+        subject === "guardian-3" ? "awaiting_tide_policy" : "pending",
+      );
+    }
+    assert.equal(
+      db.prepare("SELECT status FROM view_requests WHERE id = ?").get(requestId).status,
+      "pending",
+    );
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM view_approvals").get().count, 2);
+    await assert.rejects(
+      securedViews.getApprovedView(null, responseCapture(), { sub: "guardian-1" }, requestId),
+      (error) => error.status === 503,
+    );
+    assert.equal(signedDownloads, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_events").get().count, 3);
+  } finally {
+    db.close();
+  }
+});
+
+test("recording deletion request votes are audited and never delete content without Tide enforcement", async () => {
+  const { db } = await setup();
+  const deletions = createDeletionController({ db });
+  try {
+    const requested = responseCapture();
+    deletions.requestDeletion(null, requested, { sub: "guardian-1" }, "recording-id");
+    assert.equal(requested.status, 201);
+    const requestId = requested.body.requestId;
+    assert.equal(requested.body.requiredApprovals, 2);
+
+    for (const subject of ["guardian-2", "guardian-3"]) {
+      const decision = responseCapture();
+      deletions.decideDeletion(
+        null,
+        decision,
+        { sub: subject },
+        requestId,
+        { decision: "approve" },
+      );
+      assert.equal(
+        decision.body.status,
+        subject === "guardian-3" ? "awaiting_tide_policy" : "pending",
+      );
+    }
+    assert.equal(
+      db.prepare("SELECT deleted_at FROM recordings WHERE id = ?").get("recording-id").deleted_at,
+      null,
+    );
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM recording_deletion_approvals").get().count, 2);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM audit_events").get().count, 3);
   } finally {
     db.close();
   }

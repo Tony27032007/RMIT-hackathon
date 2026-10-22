@@ -3,6 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <title>Completing login...</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "@tidecloak/js": "/node_modules/@tidecloak/js/dist/esm/src/index.js",
+        "@tideorg/js": "/node_modules/@tideorg/js/dist/index.js",
+        "heimdall-tide": "/node_modules/heimdall-tide/dist/esm/index.js"
+      }
+    }
+  </script>
 </head>
 <body>
   <p id="status">Completing login...</p>
@@ -19,10 +28,29 @@
     try {
       // Pass full adapter JSON config, not {configUrl}. (AP-52)
       const configRes = await fetch("/tidecloak.json");
+      if (!configRes.ok) {
+        throw new Error(`The TideCloak adapter request returned HTTP ${configRes.status}.`);
+      }
       const config = await configRes.json();
-      await iam.initIAM(config);
+      const redirectUri = new URL("/auth/redirect", window.location.origin).href;
+      const silentCheckSsoRedirectUri = new URL("/silent-check-sso.html", window.location.origin).href;
+      iam.on("initError", (_event, error) => {
+        status.textContent = `Authentication initialization failed: ${error?.message || "Unknown error."}`;
+      });
+      iam.on("authError", (_event, error) => {
+        status.textContent = `Authentication failed: ${error?.message || "Unknown error."}`;
+      });
+      iam.on("tokenExpired", () => {
+        status.textContent = "Your sign-in expired. Redirecting to sign in...";
+      });
+      await iam.initIAM({
+        ...config,
+        redirectUri,
+        silentCheckSsoRedirectUri,
+        useDPoP: { mode: "strict", alg: "ES256" },
+      });
 
-      if (iam.isAuthenticated()) {
+      if (iam.isLoggedIn()) {
         status.textContent = "Redirecting...";
         window.location.assign("/");
       } else {

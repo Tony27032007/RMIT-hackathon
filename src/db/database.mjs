@@ -60,7 +60,7 @@ const schema = `
     filename TEXT NOT NULL,
     content_type TEXT NOT NULL,
     size_bytes INTEGER NOT NULL CHECK(size_bytes > 0),
-    s3_upload_id TEXT UNIQUE,
+    storage_upload_id TEXT UNIQUE,
     status TEXT NOT NULL CHECK(status IN ('uploading', 'available', 'failed')),
     created_at TEXT NOT NULL,
     completed_at TEXT
@@ -90,6 +90,53 @@ const schema = `
     PRIMARY KEY(request_id, subject_id)
   );
 
+  CREATE TABLE IF NOT EXISTS recording_deletion_requests (
+    id TEXT PRIMARY KEY,
+    recording_id TEXT NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
+    requester_subject_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('pending', 'rejected', 'cancelled')),
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS recording_deletion_approvals (
+    request_id TEXT NOT NULL REFERENCES recording_deletion_requests(id) ON DELETE CASCADE,
+    approver_subject_id TEXT NOT NULL,
+    decision TEXT NOT NULL CHECK(decision IN ('approve', 'reject')),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(request_id, approver_subject_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS recording_deletion_request_guardians (
+    request_id TEXT NOT NULL REFERENCES recording_deletion_requests(id) ON DELETE CASCADE,
+    subject_id TEXT NOT NULL,
+    PRIMARY KEY(request_id, subject_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS audit_events (
+    id TEXT PRIMARY KEY,
+    repository_id TEXT NOT NULL,
+    actor_subject_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS audit_events_repository_created
+    ON audit_events(repository_id, created_at DESC);
+
+  CREATE TRIGGER IF NOT EXISTS audit_events_are_immutable_update
+    BEFORE UPDATE ON audit_events BEGIN
+      SELECT RAISE(ABORT, 'audit events are immutable');
+    END;
+
+  CREATE TRIGGER IF NOT EXISTS audit_events_are_immutable_delete
+    BEFORE DELETE ON audit_events BEGIN
+      SELECT RAISE(ABORT, 'audit events are immutable');
+    END;
+
   CREATE TABLE IF NOT EXISTS dpop_jti (
     jti TEXT PRIMARY KEY,
     expires_at INTEGER NOT NULL
@@ -104,9 +151,21 @@ export async function openDatabase(databasePath = process.env.SQLITE_PATH ?? "da
 
   const db = new DatabaseSync(resolvedPath);
   db.exec(schema);
-  const recordingColumns = db.prepare("PRAGMA table_info(recordings)").all().map((column) => column.name);
-  if (!recordingColumns.includes("s3_upload_id")) {
-    db.exec("ALTER TABLE recordings ADD COLUMN s3_upload_id TEXT");
+  let recordingColumns = db.prepare("PRAGMA table_info(recordings)").all().map((column) => column.name);
+  if (!recordingColumns.includes("storage_upload_id")) {
+    if (recordingColumns.includes("s3_upload_id")) {
+      db.exec("UPDATE recordings SET status = 'failed', s3_upload_id = NULL WHERE status = 'uploading'");
+      db.exec("ALTER TABLE recordings RENAME COLUMN s3_upload_id TO storage_upload_id");
+    } else {
+      db.exec("ALTER TABLE recordings ADD COLUMN storage_upload_id TEXT");
+    }
+    recordingColumns = db.prepare("PRAGMA table_info(recordings)").all().map((column) => column.name);
+  }
+  if (recordingColumns.includes("s3_upload_id")) {
+    db.exec("UPDATE recordings SET storage_upload_id = COALESCE(storage_upload_id, s3_upload_id)");
+  }
+  if (!recordingColumns.includes("deleted_at")) {
+    db.exec("ALTER TABLE recordings ADD COLUMN deleted_at TEXT");
   }
   const viewRequestColumns = db.prepare("PRAGMA table_info(view_requests)").all().map((column) => column.name);
   if (!viewRequestColumns.includes("cancellation_reason")) {

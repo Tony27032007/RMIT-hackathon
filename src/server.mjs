@@ -2,10 +2,10 @@ import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, relative, resolve, sep } from "node:path";
 import { AuthenticationError, TideConfigurationError } from "./auth/tide-auth.mjs";
-import { ApiError } from "./controllers/recording-controller.mjs";
+import { ApiError } from "./errors.mjs";
 import { openDatabase } from "./db/database.mjs";
 import { createApiRouter } from "./routes/api-routes.mjs";
-import { StorageConfigurationError } from "./storage/s3-storage.mjs";
+import { StorageConfigurationError } from "./storage/local-storage.mjs";
 
 const publicRoot = resolve("public");
 const tideModuleRoots = new Map([
@@ -24,6 +24,9 @@ const contentTypes = {
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
 };
+const staticAliases = new Map([
+  ["/auth/redirect", "/auth/redirect.html"],
+]);
 
 const server = createServer(async (request, response) => {
   let pathname;
@@ -38,6 +41,10 @@ const server = createServer(async (request, response) => {
     try {
       if (await routeApi(request, response, pathname)) return;
     } catch (error) {
+      if (response.headersSent) {
+        response.destroy(error);
+        return;
+      }
       if (
         error instanceof AuthenticationError
         || error instanceof TideConfigurationError
@@ -94,7 +101,10 @@ const server = createServer(async (request, response) => {
       }
     }
   } else {
-    filePath = resolve(publicRoot, `.${isRelay ? "/tide_dpop_auth.html" : pathname === "/" ? "/index.html" : pathname}`);
+    const staticPath = isRelay
+      ? "/tide_dpop_auth.html"
+      : staticAliases.get(pathname) ?? (pathname === "/" ? "/index.html" : pathname);
+    filePath = resolve(publicRoot, `.${staticPath}`);
   }
   if (!pathname.startsWith("/node_modules/") && filePath !== publicRoot && !filePath.startsWith(`${publicRoot}${sep}`)) {
     response.writeHead(403).end("Forbidden");

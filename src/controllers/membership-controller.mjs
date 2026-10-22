@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { ApiError } from "./recording-controller.mjs";
+import { recordAuditEvent } from "../audit.mjs";
+import { ApiError } from "../errors.mjs";
+import { requireGuardianQuorumPolicy } from "../security/guardian-policy.mjs";
 
 function sendJson(response, status, body) {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
@@ -53,23 +55,50 @@ export function createMembershipController({ db }) {
           "INSERT INTO membership_request_guardians (request_id, subject_id) VALUES (?, ?)",
         );
         guardians.forEach(({ subject_id }) => snapshot.run(requestId, subject_id));
+        recordAuditEvent(db, {
+          repositoryId,
+          actorSubjectId: claims.sub,
+          eventType: "membership.requested",
+          targetType: "membership_request",
+          targetId: requestId,
+          details: { guardianCount: guardians.length },
+          createdAt,
+        });
       });
 
-      sendJson(response, 201, { requestId, status: "pending" });
+      sendJson(response, 201, { requestId, status: "pending", policyStatus: "not_configured" });
     },
 
     listMembershipRequests(_request, response, claims, repositoryId) {
       if (!activeMember(db, repositoryId, claims.sub)) {
-        throw new ApiError(404, "Repository not found or account is not an active subscriber.");
+        const requests = db.prepare(`
+          SELECT r.id, r.requester_subject_id, r.status, r.cancellation_reason, r.created_at, r.resolved_at,
+            (SELECT COUNT(*) FROM membership_request_guardians g WHERE g.request_id = r.id) AS required_approvals,
+            (SELECT COUNT(*) FROM membership_approvals a
+              WHERE a.request_id = r.id AND a.decision = 'approve') AS approved_count,
+            NULL AS my_decision,
+            (SELECT COUNT(*) FROM membership_request_guardians g WHERE g.request_id = r.id) =
+            (SELECT COUNT(*) FROM membership_approvals a
+              WHERE a.request_id = r.id AND a.decision = 'approve') AS approval_complete
+          FROM membership_requests r
+          WHERE r.repository_id = ? AND r.requester_subject_id = ?
+          ORDER BY r.created_at DESC
+          LIMIT 100
+        `).all(repositoryId, claims.sub);
+        sendJson(response, 200, { requests });
+        return;
       }
       const requests = db.prepare(`
         SELECT r.id, r.requester_subject_id, r.status, r.cancellation_reason, r.created_at, r.resolved_at,
           (SELECT COUNT(*) FROM membership_request_guardians g WHERE g.request_id = r.id) AS required_approvals,
           (SELECT COUNT(*) FROM membership_approvals a WHERE a.request_id = r.id AND a.decision = 'approve') AS approved_count,
           (SELECT a.decision FROM membership_approvals a
-            WHERE a.request_id = r.id AND a.approver_subject_id = ? LIMIT 1) AS my_decision
+            WHERE a.request_id = r.id AND a.approver_subject_id = ? LIMIT 1) AS my_decision,
+          (SELECT COUNT(*) FROM membership_request_guardians g WHERE g.request_id = r.id) =
+          (SELECT COUNT(*) FROM membership_approvals a WHERE a.request_id = r.id AND a.decision = 'approve')
+            AS approval_complete
         FROM membership_requests r
-        WHERE r.repository_id = ? AND r.status IN ('pending', 'cancelled')
+        WHERE r.repository_id = ? AND r.status IN ('pending', 'cancelled', 'rejected')
         ORDER BY r.created_at DESC
         LIMIT 100
       `).all(claims.sub, repositoryId);
@@ -104,11 +133,20 @@ export function createMembershipController({ db }) {
         if (inserted.changes !== 1) throw new ApiError(409, "This subscriber has already decided the request.");
 
         const now = new Date().toISOString();
+        recordAuditEvent(db, {
+          repositoryId: request.repository_id,
+          actorSubjectId: claims.sub,
+          eventType: body.decision === "approve" ? "membership.approval.recorded" : "membership.request.rejected",
+          targetType: "membership_request",
+          targetId: requestId,
+          details: { decision: body.decision },
+          createdAt: now,
+        });
         if (body.decision === "reject") {
           db.prepare(
             "UPDATE membership_requests SET status = 'rejected', resolved_at = ? WHERE id = ?",
           ).run(now, requestId);
-          return "rejected";
+          return { status: "rejected", approvalComplete: false };
         }
 
         const needed = db.prepare(
@@ -117,25 +155,17 @@ export function createMembershipController({ db }) {
         const approved = db.prepare(
           "SELECT COUNT(*) AS count FROM membership_approvals WHERE request_id = ? AND decision = 'approve'",
         ).get(requestId).count;
-        if (approved === needed) {
-          db.prepare(
-            "UPDATE membership_requests SET status = 'accepted', resolved_at = ? WHERE id = ?",
-          ).run(now, requestId);
-          db.prepare(`
-            INSERT INTO repository_members (repository_id, subject_id, role, status, joined_at, left_at)
-            VALUES (?, ?, 'guardian', 'active', ?, NULL)
-            ON CONFLICT(repository_id, subject_id) DO UPDATE SET
-              role = 'guardian', status = 'active', joined_at = excluded.joined_at, left_at = NULL
-          `).run(request.repository_id, request.requester_subject_id, now);
-          return "accepted";
-        }
-        return "pending";
+        return {
+          status: approved === needed ? "awaiting_tide_policy" : "pending",
+          approvalComplete: approved === needed,
+        };
       });
 
-      sendJson(response, 200, { requestId, status: result });
+      sendJson(response, 200, { requestId, ...result, policyStatus: "not_configured" });
     },
 
     leaveRepository(_request, response, claims, repositoryId) {
+      requireGuardianQuorumPolicy();
       const now = new Date().toISOString();
       withTransaction(db, () => {
         const member = activeMember(db, repositoryId, claims.sub);

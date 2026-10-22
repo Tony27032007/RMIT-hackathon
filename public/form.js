@@ -15,6 +15,8 @@ const recordings = [
 
 let requests = [];
 let viewRequests = [];
+let deletionRequests = [];
+let auditEvents = [];
 let activeRepository = null;
 let currentSubject = null;
 let liveMode = false;
@@ -43,7 +45,12 @@ async function api(path, options = {}) {
   const headers = new Headers(options.headers ?? {});
   headers.set("Authorization", `Bearer ${token}`);
   let body = options.body;
-  if (body !== undefined && typeof body !== "string") {
+  if (
+    body !== undefined
+    && typeof body !== "string"
+    && !(typeof Blob !== "undefined" && body instanceof Blob)
+    && !(body instanceof ArrayBuffer)
+  ) {
     headers.set("Content-Type", "application/json");
     body = JSON.stringify(body);
   }
@@ -108,6 +115,37 @@ function recordingCard(recording) {
   subtitle.append(element("span", "recording-source", recording.when));
   subtitle.append(element("span", "", recording.source));
   details.append(subtitle);
+  if (liveMode) {
+    const priorRequest = deletionRequests.find((request) => (
+      request.recording_id === recording.id && request.status === "pending"
+    ));
+    const deleteButton = element(
+      "button",
+      "text-button recording-delete-request",
+      priorRequest ? "Deletion request pending" : "Request deletion",
+    );
+    deleteButton.type = "button";
+    deleteButton.disabled = Boolean(priorRequest);
+    deleteButton.addEventListener("click", async () => {
+      deleteButton.disabled = true;
+      try {
+        const result = await api(`/api/recordings/${recording.id}/deletion-requests`, {
+          method: "POST",
+          body: {},
+        });
+        await refreshRepositoryRequests();
+        showAppMessage(
+          `Deletion request recorded (${result.requestId}). Other guardians must approve; actual deletion remains disabled until Tide policy enforcement is available.`,
+        );
+        setView("guardians");
+      } catch (error) {
+        showAppMessage(error instanceof Error ? error.message : "Could not request recording deletion.");
+      } finally {
+        deleteButton.disabled = false;
+      }
+    });
+    details.append(deleteButton);
+  }
   card.append(thumbnail, details);
   return card;
 }
@@ -162,12 +200,15 @@ async function openRecording(recording) {
       videoPlayer.src = access.url;
       videoPlayer.hidden = false;
       videoCaption.textContent = `${recording.title} · Approved access expires in ${access.expiresInSeconds} seconds.`;
+    } else if (existing?.approval_complete) {
+      videoCaption.textContent = `${recording.title} · Every other guardian approved. Playback remains disabled until Tide ORK enforcement is configured.`;
     } else if (existing) {
-      videoCaption.textContent = `${recording.title} · Waiting for every active guardian, including you, to approve.`;
+      videoCaption.textContent = `${recording.title} · Waiting for the other guardians to approve.`;
     } else {
-      await api(`/api/recordings/${recording.id}/view-requests`, { method: "POST", body: {} });
+      const created = await api(`/api/recordings/${recording.id}/view-requests`, { method: "POST", body: {} });
       await refreshRepositoryRequests();
-      videoCaption.textContent = `${recording.title} · View request submitted. Every active guardian, including you, must approve before playback.`;
+      videoCaption.textContent =
+        `${recording.title} · Request submitted. ${created.requiredApprovals} other guardian(s) must approve; playback remains disabled until Tide ORK enforcement is configured.`;
       setView("guardians");
     }
   } catch (error) {
@@ -224,20 +265,28 @@ function renderRequests() {
       const card = element("article", "request-card");
       const heading = element("div", "request-row");
       const summary = element("div", "guardian-details");
+      const statusText = request.status === "cancelled"
+        ? request.cancellation_reason || "Request canceled."
+        : request.status === "rejected"
+          ? "Rejected by a guardian."
+          : request.approval_complete
+            ? "Unanimous app votes recorded. Awaiting Tide enforcement; membership is unchanged."
+            : `${request.approved_count} of ${request.required_approvals} guardian approvals recorded`;
       summary.append(
         element("div", "request-email", `Account ${shortSubject(request.requester_subject_id)}`),
-        element(
-          "small",
-          "request-status",
-          request.status === "cancelled"
-            ? request.cancellation_reason || "Request canceled."
-            : `${request.approved_count} of ${request.required_approvals} approvals recorded`,
-        ),
+        element("small", "request-status", statusText),
       );
-      heading.append(summary, element("span", "you-pill", request.status === "cancelled" ? "Canceled" : "Pending"));
+      const badgeText = request.status === "cancelled"
+        ? "Canceled"
+        : request.status === "rejected"
+          ? "Rejected"
+          : request.approval_complete
+            ? "Awaiting Tide"
+            : "Pending";
+      heading.append(summary, element("span", "you-pill", badgeText));
       card.append(heading);
 
-      if (request.status === "cancelled") {
+      if (request.status !== "pending" || request.approval_complete) {
         return card;
       }
       if (request.my_decision) {
@@ -315,27 +364,32 @@ function renderRequests() {
 function renderViewRequests() {
   const section = document.getElementById("view-requests-section");
   const list = document.getElementById("view-request-list");
-  const visible = viewRequests.filter((request) => ["pending", "cancelled"].includes(request.status));
+  const visible = viewRequests.filter((request) => ["pending", "cancelled", "rejected"].includes(request.status));
   section.hidden = visible.length === 0;
   list.replaceChildren(...visible.map((request) => {
     const card = element("article", "request-card");
     const heading = element("div", "request-row");
     const summary = element("div", "guardian-details");
     const requestedBy = request.requester_subject_id === currentSubject ? "You requested" : `Account ${shortSubject(request.requester_subject_id)}`;
+    const statusText = request.status === "cancelled"
+      ? request.cancellation_reason || "Request canceled."
+      : request.status === "rejected"
+        ? "Rejected by a guardian."
+        : request.approval_complete
+          ? "All other guardians approved. Awaiting Tide policy; playback is not enabled."
+          : `${request.approved_count} of ${request.required_approvals} other guardian approvals recorded`;
     summary.append(
       element("div", "request-email", `${requestedBy} · ${request.filename}`),
-      element(
-        "small",
-        "request-status",
-        request.status === "cancelled"
-          ? request.cancellation_reason || "Request canceled."
-          : `${request.approved_count} of ${request.required_approvals} guardian approvals recorded`,
-      ),
+      element("small", "request-status", statusText),
     );
     heading.append(summary);
 
     if (request.status === "cancelled") {
       heading.append(element("span", "you-pill", "Canceled"));
+    } else if (request.status === "rejected") {
+      heading.append(element("span", "you-pill", "Rejected"));
+    } else if (request.approval_complete) {
+      heading.append(element("span", "you-pill", "Awaiting Tide"));
     } else if (request.my_decision) {
       heading.append(element("span", "you-pill", request.my_decision === "approve" ? "You approved" : "You rejected"));
     } else {
@@ -358,6 +412,93 @@ function renderViewRequests() {
     }
     card.append(heading);
     return card;
+  }));
+}
+
+function renderDeletionRequests() {
+  const section = document.getElementById("deletion-requests-section");
+  const list = document.getElementById("deletion-request-list");
+  const visible = deletionRequests.filter((request) => ["pending", "rejected", "cancelled"].includes(request.status));
+  section.hidden = visible.length === 0;
+  list.replaceChildren(...visible.map((request) => {
+    const card = element("article", "request-card");
+    const heading = element("div", "request-row");
+    const requestedBy = request.requester_subject_id === currentSubject
+      ? "You requested"
+      : `Account ${shortSubject(request.requester_subject_id)}`;
+    const statusText = request.status === "rejected"
+      ? "Rejected by a guardian."
+      : request.status === "cancelled"
+        ? "Request canceled."
+        : request.approval_complete
+          ? "Unanimous app votes recorded. Awaiting Tide enforcement; the recording is not deleted."
+          : `${request.approved_count} of ${request.required_approvals} other guardian approvals recorded`;
+    const summary = element("div", "guardian-details");
+    summary.append(
+      element("div", "request-email", `${requestedBy} · ${request.filename}`),
+      element("small", "request-status", statusText),
+    );
+    heading.append(summary);
+
+    if (request.status === "rejected" || request.status === "cancelled") {
+      heading.append(element("span", "you-pill", request.status === "rejected" ? "Rejected" : "Canceled"));
+    } else if (request.approval_complete) {
+      heading.append(element("span", "you-pill", "Awaiting Tide"));
+    } else if (request.my_decision) {
+      heading.append(element("span", "you-pill", request.my_decision === "approve" ? "You approved" : "You rejected"));
+    } else {
+      for (const decision of ["approve", "reject"]) {
+        const button = element("button", "approve-button", decision === "approve" ? "Approve deletion" : "Reject deletion");
+        button.type = "button";
+        button.addEventListener("click", async () => {
+          button.disabled = true;
+          try {
+            await api(`/api/recording-deletion-requests/${request.id}/decision`, {
+              method: "POST",
+              body: { decision },
+            });
+            await refreshRepositoryRequests();
+          } catch (error) {
+            showAppMessage(error instanceof Error ? error.message : "Could not record the deletion decision.");
+          } finally {
+            button.disabled = false;
+          }
+        });
+        heading.append(button);
+      }
+    }
+    card.append(heading);
+    return card;
+  }));
+}
+
+function renderAuditEvents() {
+  const section = document.getElementById("audit-section");
+  const list = document.getElementById("audit-event-list");
+  section.hidden = auditEvents.length === 0;
+  const labels = {
+    "repository.created": "Repository created",
+    "membership.requested": "Guardian membership requested",
+    "membership.approval.recorded": "Membership approval recorded",
+    "membership.request.rejected": "Membership request rejected",
+    "recording.view_requested": "Recording view requested",
+    "recording.view_approval_recorded": "Recording view approval recorded",
+    "recording.view_request_rejected": "Recording view request rejected",
+    "recording.deletion_requested": "Recording deletion requested",
+    "recording.deletion_approval_recorded": "Recording deletion approval recorded",
+    "recording.deletion_request_rejected": "Recording deletion request rejected",
+  };
+  list.replaceChildren(...auditEvents.map((event) => {
+    const item = element("li", "audit-event");
+    const eventLabel = labels[event.event_type] || event.event_type;
+    const actor = event.actor_subject_id === currentSubject
+      ? "You"
+      : `Account ${shortSubject(event.actor_subject_id)}`;
+    item.append(
+      element("strong", "", eventLabel),
+      element("span", "", `${actor} · ${formatDate(event.created_at)}`),
+    );
+    return item;
   }));
 }
 
@@ -386,15 +527,30 @@ function showConnectionError(message) {
   connectionError.hidden = false;
 }
 
+window.addEventListener("tide-auth-error", (event) => {
+  const { eventName, message } = event.detail;
+  if (eventName === "initialization") {
+    showConnectionError(`TideCloak setup could not be verified. ${message}`);
+    return;
+  }
+  showAppMessage(`TideCloak ${eventName} failed. ${message}`);
+});
+
 async function refreshRepositoryRequests() {
   if (!activeRepository) return;
-  const [membershipData, viewData] = await Promise.all([
+  const [membershipData, viewData, deletionData, auditData] = await Promise.all([
     api(`/api/repositories/${activeRepository.id}/membership-requests`),
     api(`/api/repositories/${activeRepository.id}/view-requests`),
+    api(`/api/repositories/${activeRepository.id}/deletion-requests`),
+    api(`/api/repositories/${activeRepository.id}/audit-events`),
   ]);
   requests = membershipData.requests;
   viewRequests = viewData.requests;
+  deletionRequests = deletionData.requests;
+  auditEvents = auditData.events;
   renderRequests();
+  renderDeletionRequests();
+  renderAuditEvents();
 }
 
 async function loadRepository(repository) {
@@ -411,18 +567,24 @@ async function loadRepository(repository) {
   copyButton.hidden = !repository;
   leaveButton.hidden = !liveMode || !repository;
   uploadButtons.forEach((button) => { button.hidden = !repository; });
+  document.getElementById("request-open").hidden = liveMode;
+  document.getElementById("request-join-empty").hidden = liveMode && Boolean(repository);
 
   if (!repository) {
     recordings = [];
     guardians = [];
     requests = [];
     viewRequests = [];
+    deletionRequests = [];
+    auditEvents = [];
     document.getElementById("repository-name").textContent = "No repository selected";
     document.getElementById("recordings-repository-name").textContent = "selected repository";
     document.getElementById("repository-description").textContent = "";
     document.getElementById("governance-note").textContent = "Create a repository or request to join one using an ID shared by a subscriber.";
     renderRecordings();
     renderGuardians();
+    renderDeletionRequests();
+    renderAuditEvents();
     return;
   }
 
@@ -430,7 +592,7 @@ async function loadRepository(repository) {
   document.getElementById("recordings-repository-name").textContent = repository.name;
   document.getElementById("repository-description").textContent = `Shared archive · ${shortSubject(repository.id)}`;
   document.getElementById("governance-note").textContent =
-    "Unanimous approvals are enforced by this application’s SQLite backend, not by an ORK-enforced cryptographic policy. S3 server-side encryption is enabled; video is not end-to-end encrypted.";
+    "Guardian-quorum enforcement and end-to-end encryption are not configured. Sensitive recording and membership actions are disabled until the ORK policy is verified.";
 
   const [recordingData, memberData] = await Promise.all([
     api(`/api/repositories/${repository.id}/recordings`),
@@ -452,14 +614,16 @@ async function loadRepository(repository) {
 
 async function initializeLiveWorkspace() {
   const iam = window.__tideIAM;
-  if (!iam?.isAuthenticated()) return;
+  if (!iam?.isLoggedIn()) return;
   liveMode = true;
   previewBanner.hidden = true;
   formSection.style.display = "block";
   document.getElementById("upload-note").textContent =
-    "Video is uploaded directly to the configured private S3 bucket with server-side encryption. The video is not end-to-end encrypted.";
+    "Uploads are disabled until per-recording encryption and the Tide ORK policy are verified. Local disk storage alone is not encrypted.";
   document.getElementById("request-note").textContent =
-    "The authenticated Tide account is the applicant; all current subscribers must approve in the app.";
+    "Membership requests and guardian votes are audited. Unanimous app votes do not add a guardian until Tide ORK enforcement is verified.";
+  fileInput.disabled = true;
+  document.querySelector('#upload-form button[type="submit"]').disabled = true;
   document.querySelector(".secure-indicator").lastChild.textContent = " Connected archive";
 
   const [account, repositoryData] = await Promise.all([
@@ -492,7 +656,7 @@ async function initializeAccess() {
     }
 
     await import("/auth.js");
-    if (window.__tideIAM?.isAuthenticated()) {
+    if (window.__tideIAM?.isLoggedIn()) {
       await initializeLiveWorkspace();
     } else {
       previewBanner.hidden = false;
@@ -522,6 +686,11 @@ document.querySelectorAll(".upload-open").forEach((button) => {
 });
 
 document.getElementById("request-open").addEventListener("click", () => {
+  requestMessage.textContent = "";
+  requestDialog.showModal();
+});
+
+document.getElementById("request-join-empty").addEventListener("click", () => {
   requestMessage.textContent = "";
   requestDialog.showModal();
 });
@@ -661,7 +830,7 @@ document.getElementById("upload-form").addEventListener("submit", async (event) 
   button.disabled = true;
   let recordingId = null;
   try {
-    setMessage(uploadMessage, "Preparing secure multipart upload…");
+    setMessage(uploadMessage, "Preparing local encrypted-storage upload…");
     const upload = await api(`/api/repositories/${activeRepository.id}/recordings/uploads`, {
       method: "POST",
       body: { filename: file.name, contentType: file.type, sizeBytes: file.size },
@@ -681,17 +850,15 @@ document.getElementById("upload-form").addEventListener("submit", async (event) 
       });
       const uploaded = await Promise.all(signed.parts.map(async ({ partNumber, url }) => {
         const offset = (partNumber - 1) * upload.partSizeBytes;
-        const response = await fetch(url, {
+        const result = await api(url, {
           method: "PUT",
+          headers: { "Content-Type": "application/octet-stream" },
           body: file.slice(offset, Math.min(offset + upload.partSizeBytes, file.size)),
         });
-        if (!response.ok) throw new Error(`S3 rejected video part ${partNumber} with HTTP ${response.status}.`);
-        const etag = response.headers.get("ETag");
-        if (!etag) throw new Error("S3 did not expose the part ETag. Configure bucket CORS to expose ETag.");
-        return { PartNumber: partNumber, ETag: etag };
+        return { PartNumber: partNumber, ETag: result.etag };
       }));
       parts.push(...uploaded);
-      setMessage(uploadMessage, `Uploading video · ${Math.min(start + parallelParts - 1, upload.partCount)} of ${upload.partCount} parts`);
+      setMessage(uploadMessage, `Saving video locally · ${Math.min(start + parallelParts - 1, upload.partCount)} of ${upload.partCount} parts`);
     }
 
     parts.sort((left, right) => left.PartNumber - right.PartNumber);
@@ -721,8 +888,28 @@ document.getElementById("request-form").addEventListener("submit", async (event)
   const repositoryId = document.getElementById("repository-id").value.trim();
   if (liveMode) {
     try {
+      const existingList = await api(`/api/repositories/${repositoryId}/membership-requests`);
+      const existing = existingList.requests.find((request) => request.status === "pending");
+      if (existing) {
+        setMessage(
+          requestMessage,
+          `${existing.approved_count} of ${existing.required_approvals} guardian approvals recorded. ${
+            existing.approval_complete
+              ? "Unanimous app votes are waiting for Tide policy enforcement; membership has not changed."
+              : "The request is still waiting for guardian votes."
+          }`,
+        );
+        return;
+      }
       const result = await api(`/api/repositories/${repositoryId}/membership-requests`, { method: "POST", body: {} });
-      setMessage(requestMessage, `Request submitted (${result.requestId}). It is pending approval from every active subscriber.`);
+      const requestList = await api(`/api/repositories/${repositoryId}/membership-requests`);
+      const request = requestList.requests.find(({ id }) => id === result.requestId);
+      setMessage(
+        requestMessage,
+        request
+          ? `Request submitted. ${request.approved_count} of ${request.required_approvals} guardian approvals recorded. Unanimous approval will still wait for Tide policy enforcement before membership changes.`
+          : `Request submitted (${result.requestId}). It is waiting for approval from every current guardian.`,
+      );
     } catch (error) {
       setMessage(requestMessage, error instanceof Error ? error.message : "Could not submit membership request.");
     }

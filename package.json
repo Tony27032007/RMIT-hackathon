@@ -11,8 +11,6 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1155.0",
-    "@aws-sdk/s3-request-presigner": "^3.1155.0",
     "@tidecloak/js": "0.14.17",
     "jose": "^6.1.0"
   }

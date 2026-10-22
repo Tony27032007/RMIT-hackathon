@@ -13,8 +13,19 @@ const iam = IAMService;
 
 // Initialize from adapter JSON — pass the FULL config object, not {url, realm, clientId}. (AP-52)
 const configRes = await fetch("/tidecloak.json");
+if (!configRes.ok) {
+  throw new Error(`The TideCloak adapter request returned HTTP ${configRes.status}.`);
+}
 const config = await configRes.json();
-await iam.initIAM({ ...config, useDPoP: { mode: "strict", alg: "ES256" } });
+const redirectUri = new URL("/auth/redirect", window.location.origin).href;
+const silentCheckSsoRedirectUri = new URL("/silent-check-sso.html", window.location.origin).href;
+
+const initConfig = {
+  ...config,
+  redirectUri,
+  silentCheckSsoRedirectUri,
+  useDPoP: { mode: "strict", alg: "ES256" },
+};
 
 // UI bindings
 const loginBtn = document.getElementById("login-btn");
@@ -23,14 +34,14 @@ const userInfo = document.getElementById("user-info");
 const formSection = document.getElementById("form-section");
 
 function updateUI() {
-  const authenticated = iam.isAuthenticated();
+  const authenticated = iam.isLoggedIn();
   loginBtn.style.display = authenticated ? "none" : "inline";
   logoutBtn.style.display = authenticated ? "inline" : "none";
   formSection.style.display = authenticated ? "block" : "none";
 
   if (authenticated) {
     // IAMService has no getUserInfo(); read identity from the ID token's claims.
-    const username = iam.getValueFromIdToken("preferred_username");
+    const username = iam.getValueFromIDToken("preferred_username");
     userInfo.textContent = `Logged in as: ${username || "unknown"}`;
   } else {
     userInfo.textContent = "";
@@ -38,8 +49,22 @@ function updateUI() {
   window.dispatchEvent(new CustomEvent("tide-auth-updated", { detail: { authenticated } }));
 }
 
+function reportAuthError(eventName, error) {
+  const message = error instanceof Error ? error.message : String(error || "Unknown authentication error.");
+  console.error(`[Hearth] Tide ${eventName}:`, error);
+  window.dispatchEvent(new CustomEvent("tide-auth-error", {
+    detail: { eventName, message },
+  }));
+}
+
+function startLogin() {
+  return iam.doLogin();
+}
+
 loginBtn.addEventListener("click", () => {
-  iam.doLogin();   // the redirect URI comes from the config; doLogin takes an optional return path
+  Promise.resolve()
+    .then(startLogin)
+    .catch((error) => reportAuthError("login", error));
 });
 
 logoutBtn.addEventListener("click", () => {
@@ -47,10 +72,27 @@ logoutBtn.addEventListener("click", () => {
 });
 
 // Listen to auth events
+iam.on("initError", (_event, error) => reportAuthError("initialization", error));
+iam.on("authError", (_event, error) => reportAuthError("authentication", error));
+iam.on("authSuccess", updateUI);
+iam.on("logout", updateUI);
 iam.on("authRefreshSuccess", updateUI);
-iam.on("authRefreshError", () => {
-  iam.doLogin();   // the redirect URI comes from the config; doLogin takes an optional return path
+iam.on("authRefreshError", (_event, error) => {
+  reportAuthError("token refresh", error);
+  Promise.resolve()
+    .then(startLogin)
+    .catch((loginError) => reportAuthError("login", loginError));
 });
+iam.on("tokenExpired", () => {
+  iam.updateIAMToken()
+    .then(updateUI)
+    .catch((error) => {
+      reportAuthError("expired token", error);
+      return startLogin();
+    });
+});
+
+await iam.initIAM(initConfig);
 
 // Initial state
 updateUI();
@@ -58,5 +100,5 @@ updateUI();
 // Export for use by form.js
 window.__tideIAM = iam;
 window.dispatchEvent(new CustomEvent("tide-auth-ready", {
-  detail: { authenticated: iam.isAuthenticated() },
+  detail: { authenticated: iam.isLoggedIn() },
 }));

@@ -157,8 +157,9 @@
             </section>
             <section class="empty-repository" id="empty-repository" hidden>
               <h2>Start your family archive</h2>
-              <p>Create a repository, then share its ID with adults who want to request membership.</p>
+              <p>Create a repository, or request to join one using an ID shared by a current guardian.</p>
               <button class="button button-primary" id="create-repository" type="button">Create repository</button>
+              <button class="button button-outline" id="request-join-empty" type="button">Request to join a repository</button>
             </section>
 
             <div class="section-heading">
@@ -176,7 +177,7 @@
               </div>
               <div class="approval-copy">
                 <strong>Every voice matters.</strong>
-                <p>A new family member joins only when every guardian agrees.</p>
+                <p>Every guardian’s vote is recorded; membership waits for verified Tide enforcement.</p>
               </div>
               <button class="button button-soft" type="button" data-go="guardians">Manage guardians</button>
             </section>
@@ -221,7 +222,7 @@
               </div>
               <div>
                 <strong>Membership is a family decision</strong>
-                <p>Every current guardian must approve a request before someone can join this repository.</p>
+                <p>Every current guardian’s vote is required. Unanimous app votes are tracked but do not add a member until Tide policy enforcement is available.</p>
               </div>
               <span class="unanimous-pill"><span></span> ALL MUST AGREE</span>
             </section>
@@ -253,6 +254,24 @@
               </div>
               <div id="view-request-list" class="request-list"></div>
             </div>
+            <div id="deletion-requests-section" hidden>
+              <div class="section-heading request-list-heading">
+                <div>
+                  <div class="section-kicker">RECORDING MANAGEMENT</div>
+                  <h2>Deletion requests</h2>
+                </div>
+              </div>
+              <div id="deletion-request-list" class="request-list"></div>
+            </div>
+            <div id="audit-section" hidden>
+              <div class="section-heading request-list-heading">
+                <div>
+                  <div class="section-kicker">HISTORY</div>
+                  <h2>Repository activity</h2>
+                </div>
+              </div>
+              <ol id="audit-event-list" class="audit-event-list"></ol>
+            </div>
             <div class="guardian-footnote">
               <svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="6.5" /><path d="M9 8v4M9 5.5v.2" /></svg>
               <span id="governance-note">In this prototype, guardians and approvals are illustrative. Real membership decisions must be verified by each subscriber’s own account.</span>
@@ -261,12 +280,13 @@
         </div>
       </main>
 
-      <div class="connection-error" id="connection-error" role="alert" hidden>
-        <div class="connection-error-icon">!</div>
-        <h1>We couldn’t connect securely.</h1>
-        <p id="connection-error-message"></p>
-        <button class="button button-primary" type="button" onclick="location.reload()">Try again</button>
-      </div>
+    </div>
+
+    <div class="connection-error" id="connection-error" role="alert" hidden>
+      <div class="connection-error-icon">!</div>
+      <h1>We couldn’t connect securely.</h1>
+      <p id="connection-error-message"></p>
+      <button class="button button-primary" type="button" onclick="location.reload()">Try again</button>
     </div>
 
     <dialog class="modal" id="upload-dialog">
@@ -301,7 +321,7 @@
         </div>
         <div class="modal-eyebrow">MEMBERSHIP REQUEST</div>
         <h2>Request to join</h2>
-        <p class="modal-description">Enter the repository ID shared by a current subscriber. The applicant’s authenticated account is used; every current subscriber must approve.</p>
+        <p class="modal-description">Enter the repository ID shared by a current subscriber. The applicant’s authenticated account is used; every other current guardian must approve. A unanimous app vote does not grant membership until Tide policy enforcement is available.</p>
         <label class="input-label" for="repository-id">Repository ID</label>
         <input class="text-input" id="repository-id" type="text" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required />
         <div class="approval-preview">
