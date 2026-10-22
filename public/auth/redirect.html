@@ -1,56 +1,83 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Completing login...</title>
-</head>
-<body>
-  <p id="status">Completing login...</p>
-  <script type="module">
-    import { IAMService } from "@tidecloak/js";
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Completing sign-in — HomeLock</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="callback">
+      <div class="panel">
+        <span class="brand">
+          <span class="brand-mark" aria-hidden="true">H</span>
+          <span>HomeLock</span>
+        </span>
+        <p id="status" class="status" role="status" aria-live="polite">
+          Completing sign-in…
+        </p>
+      </div>
+    </main>
+    <script type="module">
+      import { IAMService } from "@tidecloak/js";
 
-    const iam = IAMService;
-    const status = document.getElementById("status");
+      const iam = IAMService;
+      const status = document.getElementById("status");
+      const showError = (message) => {
+        status.textContent = message;
+        status.dataset.state = "error";
+      };
 
-    try {
-      const [adapterResponse, apiResponse] = await Promise.all([
-        fetch("/tidecloak.json", { cache: "no-store" }),
-        fetch("/api/config", { cache: "no-store" }),
-      ]);
-      if (!adapterResponse.ok) throw new Error("TideCloak adapter could not be loaded.");
-      if (!apiResponse.ok) throw new Error("HomeLock API configuration could not be loaded.");
-      const apiConfig = await apiResponse.json();
-      if (!apiConfig.authConfigured) {
-        throw new Error(apiConfig.authIssue || "Server-side TideCloak verification is not configured.");
-      }
-      const config = await adapterResponse.json();
-      iam.on("initError", (_event, error) => {
-        status.textContent = `Authentication initialization failed: ${error?.message || "unknown error"}`;
-      });
-      iam.on("authError", (_event, error) => {
-        status.textContent = `Authentication failed: ${error?.message || "please try again"}`;
-      });
-      iam.on("tokenExpired", () => {
-        status.textContent = "Your TideCloak session expired. Return to HomeLock and sign in again.";
-      });
-      await iam.initIAM({
-        ...config,
-        redirectUri: `${window.location.origin}/auth/redirect`,
-        silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
-        useDPoP: { mode: "strict", alg: "ES256" },
-      });
+      try {
+        const [adapterResponse, apiResponse] = await Promise.all([
+          fetch("/tidecloak.json", { cache: "no-store" }),
+          fetch("/api/config", { cache: "no-store" }),
+        ]);
+        if (!adapterResponse.ok)
+          throw new Error("The TideCloak adapter could not be loaded.");
+        if (!apiResponse.ok)
+          throw new Error(
+            "The HomeLock API configuration could not be loaded.",
+          );
+        const apiConfig = await apiResponse.json();
+        if (!apiConfig.authConfigured) {
+          throw new Error(
+            apiConfig.authIssue ||
+              "Server-side TideCloak verification is not configured.",
+          );
+        }
+        const config = await adapterResponse.json();
+        iam.on("initError", (_event, error) => {
+          showError(
+            `TideCloak initialization failed: ${error?.message || "unknown error."}`,
+          );
+        });
+        iam.on("authError", (_event, error) => {
+          showError(`Sign-in failed: ${error?.message || "please try again."}`);
+        });
+        iam.on("tokenExpired", () => {
+          showError(
+            "Your TideCloak session expired. Return to HomeLock and sign in again.",
+          );
+        });
+        await iam.initIAM({
+          ...config,
+          redirectUri: `${window.location.origin}/auth/redirect`,
+          silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
+          useDPoP: { mode: "strict", alg: "ES256" },
+        });
 
-      if (iam.isLoggedIn()) {
-        status.textContent = "Redirecting...";
-        window.location.assign("/");
-      } else {
-        status.textContent = "Login was not completed. Return to HomeLock and try again.";
+        if (iam.isLoggedIn()) {
+          status.textContent = "Signed in. Returning to HomeLock…";
+          window.location.assign("/");
+        } else {
+          showError("Sign-in was not completed. Returning to HomeLock…");
+          setTimeout(() => window.location.assign("/"), 3000);
+        }
+      } catch (err) {
+        showError(`Sign-in error: ${err.message} Returning to HomeLock…`);
         setTimeout(() => window.location.assign("/"), 3000);
       }
-    } catch (err) {
-      status.textContent = `Authentication error: ${err.message}`;
-      setTimeout(() => window.location.assign("/"), 3000);
-    }
-  </script>
-</body>
+    </script>
+  </body>
 </html>
