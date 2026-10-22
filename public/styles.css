@@ -12,7 +12,7 @@
   --muted-strong: #65695f;
   --faint: #8b8e85;
   --paper: #f4f3ef;
-  --white: #fffefa;
+  --white: #fff;
   --inset: #f8f7f3;
   --on-green: #fff;
   --green: #425b3e;
@@ -54,7 +54,7 @@
 
   /* Shape */
   --radius-sm: 8px;
-  --radius-md: 12px;
+  --radius-md: 14px;
   --radius-pill: 999px;
   --control-height: 40px;
   --control-height-sm: 32px;
@@ -62,6 +62,90 @@
   font-family: var(--font);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+.form-status[data-state="loading"],
+.status-line[data-state="loading"],
+.status[data-state="loading"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.form-status[data-state="loading"]::before,
+.status-line[data-state="loading"]::before,
+.status[data-state="loading"]::before {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  border: 2px solid rgb(66 91 62 / 20%);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  content: "";
+  animation: spin 700ms linear infinite;
+}
+
+.status-line[data-state="loading"] {
+  color: var(--green);
+  background: rgb(231 235 223 / 72%);
+}
+
+.button.is-loading {
+  gap: var(--space-2);
+}
+
+.button.is-loading::before {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  border: 2px solid rgb(255 255 255 / 45%);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  content: "";
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+}
+
+.loading-card span {
+  height: 11px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(100deg, #f0f0eb 25%, #fafaf7 45%, #f0f0eb 65%);
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.25s ease-in-out infinite;
+}
+
+.loading-card span:first-child {
+  width: 62%;
+  height: 15px;
+}
+
+.loading-card span:nth-child(2) {
+  width: 88%;
+}
+
+.loading-card span:last-child {
+  width: 42%;
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    background-position-x: -220%;
+  }
 }
 
 /* ==========================================================================
@@ -75,9 +159,12 @@ body {
   min-width: 320px;
   margin: 0;
   color: var(--ink);
-  background: var(--paper);
+  background:
+    radial-gradient(ellipse at 50% -18%, rgb(255 255 255 / 82%), transparent 54%),
+    var(--paper);
   font-size: var(--text-sm);
   line-height: var(--leading);
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -104,7 +191,7 @@ h2 {
   margin-bottom: 0;
   font-size: var(--text-xl);
   font-weight: 600;
-  letter-spacing: -1px;
+  letter-spacing: -1.2px;
 }
 
 h3 {
@@ -190,9 +277,10 @@ footer {
   line-height: 1;
   white-space: nowrap;
   transition:
-    background 140ms ease,
-    border-color 140ms ease,
-    transform 140ms ease;
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
 }
 
 .button:hover {
@@ -212,6 +300,7 @@ footer {
 
 .button-dark:hover:not(:disabled) {
   background: var(--green-dark);
+  box-shadow: 0 5px 14px rgb(47 69 48 / 18%);
 }
 
 .button-quiet {
@@ -301,18 +390,24 @@ textarea:focus-visible {
 .panel {
   min-width: 0;
   padding: var(--space-6);
+  box-shadow: 0 8px 28px rgb(35 40 32 / 3%);
+  transition:
+    border-color 200ms ease,
+    box-shadow 220ms ease,
+    transform 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
 }
 
 /* ==========================================================================
    Top bar
    ========================================================================== */
 .topbar {
-  min-height: 72px;
+  position: relative;
+  min-height: 76px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgb(220 222 213 / 70%);
 }
 
 .brand {
@@ -336,6 +431,12 @@ textarea:focus-visible {
   border-radius: 10px 10px 10px 3px;
   font-size: 17px;
   font-weight: 700;
+  box-shadow: 0 3px 10px rgb(47 69 48 / 15%);
+  transition: transform 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.brand:hover .brand-mark {
+  transform: rotate(-5deg) scale(1.04);
 }
 
 .account {
@@ -425,6 +526,16 @@ h1 span {
   border-radius: 22px 22px 22px 7px;
   box-shadow: 0 24px 60px #65715822;
   transform: rotate(-7deg);
+  animation: hero-float 6s ease-in-out infinite;
+}
+
+@keyframes hero-float {
+  0%, 100% {
+    transform: translateY(0) rotate(-7deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(-5deg);
+  }
 }
 
 .art-lock {
@@ -481,7 +592,7 @@ h1 span {
    Workspace
    ========================================================================== */
 .workspace {
-  padding: var(--space-16) 0 var(--space-10);
+  padding: var(--space-12) 0 var(--space-10);
 }
 
 .section-heading {
@@ -546,6 +657,27 @@ h1 span {
   display: flex;
   flex-direction: column;
   padding: var(--space-5);
+  border-color: rgb(220 222 213 / 80%);
+  box-shadow: 0 8px 24px rgb(35 40 32 / 3%);
+  animation: content-arrive 420ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  transition:
+    border-color 180ms ease,
+    box-shadow 220ms ease,
+    transform 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.repository-card:hover {
+  transform: translateY(-3px);
+  border-color: rgb(66 91 62 / 20%);
+  box-shadow: 0 14px 34px rgb(35 40 32 / 8%);
+}
+
+.repository-card:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.repository-card:nth-child(3) {
+  animation-delay: 90ms;
 }
 
 .repository-card p {
@@ -573,6 +705,7 @@ h1 span {
 .form-card {
   display: grid;
   gap: var(--space-2);
+  border-color: rgb(220 222 213 / 80%);
 }
 
 .form-heading {
@@ -600,6 +733,7 @@ label {
 
 input[type="text"],
 input:not([type]),
+input[type="email"],
 textarea {
   width: 100%;
   min-height: var(--control-height);
@@ -610,6 +744,18 @@ textarea {
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   line-height: 1.5;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+input[type="text"]:focus,
+input:not([type]):focus,
+input[type="email"]:focus,
+textarea:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 4px rgb(146 169 138 / 15%);
 }
 
 textarea {
@@ -776,6 +922,73 @@ input[type="file"]::file-selector-button {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
+  animation: content-arrive 340ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.workflow-card:hover {
+  border-color: rgb(66 91 62 / 18%);
+  box-shadow: 0 5px 16px rgb(35 40 32 / 4%);
+}
+
+@keyframes content-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.file-activity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.file-activity::before {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  border: 2px solid rgb(66 91 62 / 20%);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  content: "";
+  animation: spin 700ms linear infinite;
+}
+
+.file-activity.is-complete::before {
+  width: 7px;
+  height: 12px;
+  margin: 0 3px;
+  border: solid var(--green);
+  border-width: 0 2px 2px 0;
+  border-radius: 0;
+  transform: rotate(45deg);
+  animation: none;
+}
+
+.file-activity.is-error {
+  color: var(--danger);
+}
+
+.file-activity.is-error::before {
+  width: 13px;
+  height: 13px;
+  border: 0;
+  content: "!";
+  color: var(--danger);
+  font-weight: 700;
+  text-align: center;
+  animation: none;
 }
 
 .workflow-card-header {
@@ -1059,6 +1272,98 @@ footer {
   margin-bottom: var(--space-4);
 }
 
+.callback .panel {
+  width: min(460px, 100%);
+  padding: clamp(32px, 8vw, 56px);
+  border: 1px solid rgb(35 40 32 / 7%);
+  border-radius: 24px;
+  background: var(--white);
+  box-shadow: 0 24px 72px rgb(35 40 32 / 9%);
+}
+
+.callback-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-right: 10px;
+  border-radius: 14px 14px 14px 5px;
+  transition: transform 700ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.callback-welcome .callback-mark {
+  transform: rotate(-8deg) scale(1.08);
+}
+
+.callback .callback-title {
+  margin: var(--space-6) 0 var(--space-2);
+  color: var(--ink);
+  font-size: clamp(34px, 8vw, 46px);
+  font-weight: 600;
+  letter-spacing: -2px;
+}
+
+.callback-copy {
+  margin-bottom: var(--space-6);
+}
+
+.callback-welcome .eyebrow,
+.callback-welcome .callback-title,
+.callback-welcome .callback-copy {
+  animation: callback-arrive 600ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.callback-welcome .callback-title {
+  animation-delay: 90ms;
+}
+
+.callback-welcome .callback-copy {
+  animation-delay: 180ms;
+}
+
+.callback-progress {
+  width: min(180px, 100%);
+  height: 3px;
+  margin: 0 auto var(--space-5);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--sage);
+}
+
+.callback-progress span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  animation: callback-progress 1.55s ease-in-out both;
+}
+
+.callback-welcome #status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@keyframes callback-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes callback-progress {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
 /* ==========================================================================
    Small screens
    ========================================================================== */
@@ -1192,5 +1497,10 @@ footer {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .callback-progress span {
+    animation: none;
+    width: 100%;
   }
 }

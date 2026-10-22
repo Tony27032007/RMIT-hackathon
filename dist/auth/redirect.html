@@ -3,20 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Completing sign-in — HomeLock</title>
-    <script type="module" crossorigin src="/assets/redirect-Cx6JKlcI.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/IAMService-Bo-b1Ddn.js">
-    <link rel="stylesheet" crossorigin href="/assets/IAMService-DztwENMH.css">
+    <title>Welcome home — HomeLock</title>
+    <script type="module" crossorigin src="/assets/redirect-18QjatZn.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/IAMService-mNRlyqeY.js">
+    <link rel="stylesheet" crossorigin href="/assets/IAMService-D24BSi-C.css">
   </head>
   <body>
     <main class="callback">
-      <div class="panel">
+      <div id="callback-panel" class="panel">
         <span class="brand">
-          <span class="brand-mark" aria-hidden="true">H</span>
+          <span class="brand-mark callback-mark" aria-hidden="true">H</span>
           <span>HomeLock</span>
         </span>
+        <p id="callback-eyebrow" class="eyebrow" hidden>YOUR HOUSEHOLD SPACE</p>
+        <h1 id="welcome-title" class="callback-title" hidden>Welcome home.</h1>
+        <p id="welcome-copy" class="subtle callback-copy" hidden>
+          Your household archive is ready.
+        </p>
+        <div id="welcome-progress" class="callback-progress" aria-hidden="true" hidden>
+          <span></span>
+        </div>
         <p id="status" class="status" role="status" aria-live="polite">
-          Completing sign-in…
+          Completing login…
         </p>
       </div>
     </main>

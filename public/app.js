@@ -48,6 +48,32 @@ function setStatus(element, message, state = "ready") {
   element.dataset.state = state;
 }
 
+function setButtonLoading(button, loading, label = "") {
+  if (!button.dataset.defaultLabel) button.dataset.defaultLabel = button.textContent.trim();
+  button.disabled = loading;
+  button.classList.toggle("is-loading", loading);
+  button.textContent = loading ? label : button.dataset.defaultLabel;
+}
+
+function navigateTo(hash) {
+  const route = hash ? `/${hash}` : "/";
+  window.history.pushState(null, "", route);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+function showLoadingCards(container, count) {
+  const cards = Array.from({ length: count }, () => {
+    const card = document.createElement("div");
+    card.className = "loading-card";
+    card.setAttribute("aria-hidden", "true");
+    for (let line = 0; line < 3; line += 1) {
+      card.append(document.createElement("span"));
+    }
+    return card;
+  });
+  container.replaceChildren(...cards);
+}
+
 async function apiRequest(path, options = {}) {
   const response = await secureApiFetch(path, options);
   const contentType = response.headers.get("content-type") || "";
@@ -95,7 +121,7 @@ function repositoryCard(repository) {
   badge.textContent = "App-managed votes";
   const openButton = createButton(
     "Open",
-    () => void openRepository(repository.id),
+    () => navigateTo(`#repository/${repository.id}`),
     "dark",
   );
   const actions = document.createElement("div");
@@ -111,6 +137,7 @@ function showRepositoryList() {
   repositoryDetail.hidden = true;
   repositoryForms.hidden = false;
   repositoryList.hidden = false;
+  setStatus(formStatus, "");
 }
 
 function shortId(userId) {
@@ -160,9 +187,16 @@ function sizeLabel(size) {
   return `${(size / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-async function viewApprovedVideo(file, viewRequestId, item) {
+async function viewApprovedVideo(file, viewRequestId, item, button) {
+  setButtonLoading(button, true, "Loading video…");
+  item.querySelector(".file-activity")?.remove();
+  const activity = document.createElement("p");
+  activity.className = "file-activity";
+  activity.setAttribute("role", "status");
+  activity.textContent = "Preparing your approved video…";
+  item.append(activity);
   try {
-    setStatus(workflowStatus, "Loading approved video…");
+    setStatus(workflowStatus, "Loading approved video…", "loading");
     const response = await secureApiFetch(
       `/api/repositories/${encodeURIComponent(selectedRepositoryId)}/files/${encodeURIComponent(file.id)}/content?requestId=${encodeURIComponent(viewRequestId)}`,
     );
@@ -191,6 +225,8 @@ async function viewApprovedVideo(file, viewRequestId, item) {
       key,
       encrypted,
     );
+    activity.textContent = "Video ready";
+    activity.classList.add("is-complete");
     const video = document.createElement("video");
     video.controls = true;
     video.preload = "metadata";
@@ -207,7 +243,11 @@ async function viewApprovedVideo(file, viewRequestId, item) {
       "Video decrypted in your browser after the required approvals.",
     );
   } catch (error) {
+    activity.textContent = error.message;
+    activity.classList.add("is-error");
     setStatus(workflowStatus, error.message, "error");
+  } finally {
+    setButtonLoading(button, false);
   }
 }
 
@@ -260,15 +300,10 @@ function renderFiles(files, requests) {
           repositoryDetail.dataset.membershipVersion,
     );
     if (activeViewRequest) {
-      actions.append(
-        createButton(
-          "Play video",
-          () => {
-            void viewApprovedVideo(file, activeViewRequest.id, item);
-          },
-          "dark",
-        ),
-      );
+      const playButton = createButton("Play video", () => {
+        void viewApprovedVideo(file, activeViewRequest.id, item, playButton);
+      }, "dark");
+      actions.append(playButton);
     } else {
       actions.append(
         createButton(
@@ -398,7 +433,15 @@ async function vote(requestId, decision) {
 
 async function openRepository(repositoryId) {
   if (!isAuthenticated()) return;
+  selectedRepositoryId = repositoryId;
+  repositoryForms.hidden = true;
+  repositoryList.hidden = true;
+  repositoryDetail.hidden = false;
+  repositoryDetailTitle.textContent = "Opening repository…";
+  repositoryDetailDescription.textContent = "";
   repositoryCount.textContent = "Loading repository…";
+  setStatus(workflowStatus, "Loading household archive…", "loading");
+  showLoadingCards(repositoryFilesList, 2);
   try {
     const data = await apiRequest(
       `/api/repositories/${encodeURIComponent(repositoryId)}`,
@@ -432,12 +475,15 @@ async function openRepository(repositoryId) {
       }),
     );
     renderRequests(data.requests, data.files);
+    setStatus(workflowStatus, "");
     repositoryForms.hidden = true;
     repositoryList.hidden = true;
     repositoryDetail.hidden = false;
     repositoryCount.textContent = `${data.guardians.length} ${data.guardians.length === 1 ? "guardian" : "guardians"}`;
   } catch (error) {
     repositoryCount.textContent = error.message;
+    setStatus(workflowStatus, error.message, "error");
+    repositoryFilesList.replaceChildren(emptyNote("Videos could not be loaded. Try opening the repository again."));
   }
 }
 
@@ -451,12 +497,18 @@ async function loadRepositories() {
   }
   signedOutPanel.hidden = true;
   authenticatedPanel.hidden = false;
-  if (selectedRepositoryId) {
-    void openRepository(selectedRepositoryId);
+  if (window.location.hash === "#profile") return;
+  const repositoryRoute = /^#repository\/([a-f0-9-]{36})$/.exec(window.location.hash);
+  if (repositoryRoute) {
+    void openRepository(repositoryRoute[1]);
     return;
+  }
+  if (window.location.hash) {
+    window.history.replaceState(null, "", "/");
   }
   showRepositoryList();
   repositoryCount.textContent = "Loading your repositories…";
+  showLoadingCards(repositoryList, 3);
   try {
     const { repositories } = await apiRequest("/api/repositories");
     repositoryList.replaceChildren(...repositories.map(repositoryCard));
@@ -473,14 +525,14 @@ async function loadRepositories() {
     }
   } catch (error) {
     repositoryCount.textContent = error.message;
+    repositoryList.replaceChildren(emptyNote(error.message));
   }
 }
 
 document
   .getElementById("back-to-repositories")
   .addEventListener("click", () => {
-    showRepositoryList();
-    void loadRepositories();
+    navigateTo("");
   });
 
 document
@@ -510,11 +562,11 @@ document
     const file = document.getElementById("repository-files").files[0];
     if (!file || !selectedRepositoryId) return;
     const submit = form.querySelector('button[type="submit"]');
-    submit.disabled = true;
+    setButtonLoading(submit, true, "Encrypting video…");
     try {
       if (file.size > 50 * 1024 * 1024 - 16)
         throw new Error("Choose a video smaller than 50 MB.");
-      setStatus(workflowStatus, "Encrypting video in your browser…");
+      setStatus(workflowStatus, "Encrypting video in your browser…", "loading");
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const key = await crypto.subtle.generateKey(
         { name: "AES-GCM", length: 256 },
@@ -527,6 +579,8 @@ document
         await file.arrayBuffer(),
       );
       const rawKey = new Uint8Array(await crypto.subtle.exportKey("raw", key));
+      setButtonLoading(submit, true, "Uploading video…");
+      setStatus(workflowStatus, "Uploading encrypted video…", "loading");
       await apiRequest(
         `/api/repositories/${encodeURIComponent(selectedRepositoryId)}/files`,
         {
@@ -547,7 +601,7 @@ document
     } catch (error) {
       setStatus(workflowStatus, error.message, "error");
     } finally {
-      submit.disabled = false;
+      setButtonLoading(submit, false);
     }
   });
 
@@ -627,8 +681,8 @@ document
 repositoryForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const submitButton = repositoryForm.querySelector('button[type="submit"]');
-  submitButton.disabled = true;
-  setStatus(formStatus, "Creating repository…");
+  setButtonLoading(submitButton, true, "Creating…");
+  setStatus(formStatus, "Creating your household repository…", "loading");
   try {
     const { repository } = await apiRequest("/api/repositories", {
       method: "POST",
@@ -639,13 +693,16 @@ repositoryForm.addEventListener("submit", async (event) => {
       }),
     });
     repositoryForm.reset();
-    selectedRepositoryId = repository.id;
-    await loadRepositories();
+    navigateTo(`#repository/${repository.id}`);
   } catch (error) {
     setStatus(formStatus, error.message, "error");
   } finally {
-    submitButton.disabled = false;
+    setButtonLoading(submitButton, false);
   }
+});
+
+window.addEventListener("popstate", () => {
+  void loadRepositories();
 });
 
 window.addEventListener("homelock-auth-changed", () => {

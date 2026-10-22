@@ -3,18 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Completing sign-in — HomeLock</title>
+    <title>Welcome home — HomeLock</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="callback">
-      <div class="panel">
+      <div id="callback-panel" class="panel">
         <span class="brand">
-          <span class="brand-mark" aria-hidden="true">H</span>
+          <span class="brand-mark callback-mark" aria-hidden="true">H</span>
           <span>HomeLock</span>
         </span>
+        <p id="callback-eyebrow" class="eyebrow" hidden>YOUR HOUSEHOLD SPACE</p>
+        <h1 id="welcome-title" class="callback-title" hidden>Welcome home.</h1>
+        <p id="welcome-copy" class="subtle callback-copy" hidden>
+          Your household archive is ready.
+        </p>
+        <div id="welcome-progress" class="callback-progress" aria-hidden="true" hidden>
+          <span></span>
+        </div>
         <p id="status" class="status" role="status" aria-live="polite">
-          Completing sign-in…
+          Completing login…
         </p>
       </div>
     </main>
@@ -23,6 +31,13 @@
 
       const iam = IAMService;
       const status = document.getElementById("status");
+      const callbackPanel = document.getElementById("callback-panel");
+      const welcomeElements = [
+        document.getElementById("callback-eyebrow"),
+        document.getElementById("welcome-title"),
+        document.getElementById("welcome-copy"),
+        document.getElementById("welcome-progress"),
+      ];
       const showError = (message) => {
         status.textContent = message;
         status.dataset.state = "error";
@@ -68,8 +83,16 @@
         });
 
         if (iam.isLoggedIn()) {
-          status.textContent = "Signed in. Returning to HomeLock…";
-          window.location.assign("/");
+          callbackPanel.classList.add("callback-welcome");
+          welcomeElements.forEach((element) => {
+            element.hidden = false;
+          });
+          status.textContent = "Taking you to your home…";
+          status.dataset.state = "ready";
+          const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? 500
+            : 1800;
+          setTimeout(() => window.location.assign("/"), delay);
         } else {
           showError("Sign-in was not completed. Returning to HomeLock…");
           setTimeout(() => window.location.assign("/"), 3000);

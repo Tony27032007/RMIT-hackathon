@@ -14,6 +14,13 @@ const removeAvatarButton = document.getElementById("remove-avatar");
 const profileStatus = document.getElementById("profile-status");
 const avatarStatus = document.getElementById("avatar-status");
 let avatarUrl = null;
+let profileIsOpen = false;
+
+function navigateTo(hash) {
+  const route = hash ? `/${hash}` : "/";
+  window.history.pushState(null, "", route);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
 
 function setStatus(element, message, state = "ready") {
   element.textContent = message;
@@ -49,6 +56,7 @@ function updateAvatarFallback() {
 }
 
 function showHome() {
+  profileIsOpen = false;
   profilePage.hidden = true;
   workspace.hidden = false;
 }
@@ -70,6 +78,8 @@ async function loadAvatar() {
 
 async function openProfile() {
   if (!isAuthenticated()) return;
+  if (profileIsOpen) return;
+  profileIsOpen = true;
   workspace.hidden = true;
   profilePage.hidden = false;
   profilePage.classList.remove("page-enter");
@@ -90,9 +100,17 @@ async function openProfile() {
   }
 }
 
-profileButton.addEventListener("click", () => void openProfile());
-profileBack.addEventListener("click", showHome);
+profileButton.addEventListener("click", () => navigateTo("#profile"));
+profileBack.addEventListener("click", () => navigateTo(""));
 displayNameInput.addEventListener("input", updateAvatarFallback);
+
+window.addEventListener("popstate", () => {
+  if (window.location.hash === "#profile") {
+    void openProfile();
+  } else {
+    showHome();
+  }
+});
 
 profileForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -163,5 +181,7 @@ window.addEventListener("homelock-auth-changed", () => {
     showHome();
     setAvatar(null);
     profileForm.reset();
+  } else if (window.location.hash === "#profile") {
+    void openProfile();
   }
 });
