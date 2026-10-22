@@ -9,6 +9,15 @@
       content="A family-governed archive for home-security recordings."
     />
     <title>HomeLock — Family archive</title>
+    <script>
+      try {
+        if (localStorage.getItem("homelock-theme") === "dark") {
+          document.documentElement.dataset.theme = "dark";
+        }
+      } catch (error) {
+        console.warn("[homelock] Could not read the saved theme preference.", error);
+      }
+    </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -19,6 +28,23 @@
       </a>
       <div class="account">
         <span id="user-info" class="user-info" aria-live="polite"></span>
+        <button
+          id="theme-toggle"
+          class="button button-quiet theme-toggle"
+          type="button"
+          aria-pressed="false"
+          aria-label="Switch to dark mode"
+          title="Switch to dark mode"
+        >
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20.2 15.6A8.4 8.4 0 0 1 8.4 3.8 8.5 8.5 0 1 0 20.2 15.6Z" />
+          </svg>
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" />
+          </svg>
+          <span id="theme-toggle-label">Dark mode</span>
+        </button>
         <button
           id="profile-btn"
           class="button button-quiet profile-nav"
@@ -421,5 +447,6 @@
 
     <script type="module" src="/app.js"></script>
     <script type="module" src="/profile.js"></script>
+    <script type="module" src="/theme.js"></script>
   </body>
 </html>
