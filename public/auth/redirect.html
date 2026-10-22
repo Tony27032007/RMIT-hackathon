@@ -3,50 +3,40 @@
 <head>
   <meta charset="UTF-8" />
   <title>Completing login...</title>
-  <script type="importmap">
-    {
-      "imports": {
-        "@tidecloak/js": "/node_modules/@tidecloak/js/dist/esm/src/index.js",
-        "@tideorg/js": "/node_modules/@tideorg/js/dist/index.js",
-        "heimdall-tide": "/node_modules/heimdall-tide/dist/esm/index.js"
-      }
-    }
-  </script>
 </head>
 <body>
   <p id="status">Completing login...</p>
   <script type="module">
-    // Process OIDC callback and redirect.
-    // The SDK handles the auth code exchange during init.
-    // After init, check auth state and redirect accordingly.
     import { IAMService } from "@tidecloak/js";
 
-    // IAMService is a singleton — use directly, do NOT call getInstance(). (AP-51)
     const iam = IAMService;
     const status = document.getElementById("status");
 
     try {
-      // Pass full adapter JSON config, not {configUrl}. (AP-52)
-      const configRes = await fetch("/tidecloak.json");
-      if (!configRes.ok) {
-        throw new Error(`The TideCloak adapter request returned HTTP ${configRes.status}.`);
+      const [adapterResponse, apiResponse] = await Promise.all([
+        fetch("/tidecloak.json", { cache: "no-store" }),
+        fetch("/api/config", { cache: "no-store" }),
+      ]);
+      if (!adapterResponse.ok) throw new Error("TideCloak adapter could not be loaded.");
+      if (!apiResponse.ok) throw new Error("HomeLock API configuration could not be loaded.");
+      const apiConfig = await apiResponse.json();
+      if (!apiConfig.authConfigured) {
+        throw new Error(apiConfig.authIssue || "Server-side TideCloak verification is not configured.");
       }
-      const config = await configRes.json();
-      const redirectUri = new URL("/auth/redirect", window.location.origin).href;
-      const silentCheckSsoRedirectUri = new URL("/silent-check-sso.html", window.location.origin).href;
+      const config = await adapterResponse.json();
       iam.on("initError", (_event, error) => {
-        status.textContent = `Authentication initialization failed: ${error?.message || "Unknown error."}`;
+        status.textContent = `Authentication initialization failed: ${error?.message || "unknown error"}`;
       });
       iam.on("authError", (_event, error) => {
-        status.textContent = `Authentication failed: ${error?.message || "Unknown error."}`;
+        status.textContent = `Authentication failed: ${error?.message || "please try again"}`;
       });
       iam.on("tokenExpired", () => {
-        status.textContent = "Your sign-in expired. Redirecting to sign in...";
+        status.textContent = "Your TideCloak session expired. Return to HomeLock and sign in again.";
       });
       await iam.initIAM({
         ...config,
-        redirectUri,
-        silentCheckSsoRedirectUri,
+        redirectUri: `${window.location.origin}/auth/redirect`,
+        silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
         useDPoP: { mode: "strict", alg: "ES256" },
       });
 
@@ -54,11 +44,11 @@
         status.textContent = "Redirecting...";
         window.location.assign("/");
       } else {
-        status.textContent = "Authentication failed. Redirecting to login...";
-        setTimeout(() => window.location.assign("/"), 2000);
+        status.textContent = "Login was not completed. Return to HomeLock and try again.";
+        setTimeout(() => window.location.assign("/"), 3000);
       }
     } catch (err) {
-      status.textContent = "Authentication error: " + err.message;
+      status.textContent = `Authentication error: ${err.message}`;
       setTimeout(() => window.location.assign("/"), 3000);
     }
   </script>

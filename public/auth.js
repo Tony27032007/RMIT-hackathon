@@ -1,104 +1,131 @@
-// Tide auth initialization using IAMService.
-//
-// IAMService is the shipped singleton and supports DPoP. DPoP is OPT-IN on the client: without
-// `useDPoP` in the config the SDK issues plain bearer tokens and says nothing, and a realm that
-// requires bound tokens (the pack's template does) then fails login with "DPoP proof is missing".
-// There is no enableDpop flag. See canon/framework-matrix.md.
-
 import { IAMService } from "@tidecloak/js";
 
-// IAMService is a pre-instantiated singleton — use it directly.
-// Do NOT call IAMService.getInstance() — it does not exist. (AP-51)
 const iam = IAMService;
-
-// Initialize from adapter JSON — pass the FULL config object, not {url, realm, clientId}. (AP-52)
-const configRes = await fetch("/tidecloak.json");
-if (!configRes.ok) {
-  throw new Error(`The TideCloak adapter request returned HTTP ${configRes.status}.`);
-}
-const config = await configRes.json();
-const redirectUri = new URL("/auth/redirect", window.location.origin).href;
-const silentCheckSsoRedirectUri = new URL("/silent-check-sso.html", window.location.origin).href;
-
-const initConfig = {
-  ...config,
-  redirectUri,
-  silentCheckSsoRedirectUri,
-  useDPoP: { mode: "strict", alg: "ES256" },
-};
-
-// UI bindings
-const loginBtn = document.getElementById("login-btn");
-const logoutBtn = document.getElementById("logout-btn");
+const status = document.getElementById("auth-status");
+const loginButton = document.getElementById("login-btn");
+const logoutButton = document.getElementById("logout-btn");
 const userInfo = document.getElementById("user-info");
-const formSection = document.getElementById("form-section");
+let available = false;
+let initialized = false;
 
-function updateUI() {
-  const authenticated = iam.isLoggedIn();
-  loginBtn.style.display = authenticated ? "none" : "inline";
-  logoutBtn.style.display = authenticated ? "inline" : "none";
-  formSection.style.display = authenticated ? "block" : "none";
-
-  if (authenticated) {
-    // IAMService has no getUserInfo(); read identity from the ID token's claims.
-    const username = iam.getValueFromIDToken("preferred_username");
-    userInfo.textContent = `Logged in as: ${username || "unknown"}`;
-  } else {
-    userInfo.textContent = "";
-  }
-  window.dispatchEvent(new CustomEvent("tide-auth-updated", { detail: { authenticated } }));
+function setStatus(message, state = "ready") {
+  status.textContent = message;
+  status.dataset.state = state;
 }
 
-function reportAuthError(eventName, error) {
-  const message = error instanceof Error ? error.message : String(error || "Unknown authentication error.");
-  console.error(`[Hearth] Tide ${eventName}:`, error);
-  window.dispatchEvent(new CustomEvent("tide-auth-error", {
-    detail: { eventName, message },
-  }));
+function notifyChange() {
+  window.dispatchEvent(new CustomEvent("homelock-auth-changed"));
 }
 
-function startLogin() {
-  return iam.doLogin();
+function updateAuthUi() {
+  const authenticated = available && iam.isLoggedIn();
+  loginButton.hidden = authenticated || !available;
+  logoutButton.hidden = !authenticated;
+  const username = authenticated && iam.getValueFromIdToken("preferred_username");
+  userInfo.textContent = username ? `Signed in as ${username}` : authenticated ? "Signed in" : "";
+  if (authenticated) setStatus("Signed in with TideCloak.");
+  notifyChange();
 }
 
-loginBtn.addEventListener("click", () => {
-  Promise.resolve()
-    .then(startLogin)
-    .catch((error) => reportAuthError("login", error));
-});
+export async function initializeTide() {
+  if (initialized) return;
+  initialized = true;
+  let initializationError = null;
+  let authenticationError = null;
 
-logoutBtn.addEventListener("click", () => {
-  iam.doLogout();  // takes no arguments
-});
+  try {
+    const apiConfigResponse = await fetch("/api/config", { cache: "no-store" });
+    const apiConfig = await apiConfigResponse.json();
+    if (!apiConfigResponse.ok || !apiConfig.authConfigured) {
+      setStatus(apiConfig.authIssue || "Server-side TideCloak verification is not configured.", "error");
+      loginButton.hidden = true;
+      return;
+    }
 
-// Listen to auth events
-iam.on("initError", (_event, error) => reportAuthError("initialization", error));
-iam.on("authError", (_event, error) => reportAuthError("authentication", error));
-iam.on("authSuccess", updateUI);
-iam.on("logout", updateUI);
-iam.on("authRefreshSuccess", updateUI);
-iam.on("authRefreshError", (_event, error) => {
-  reportAuthError("token refresh", error);
-  Promise.resolve()
-    .then(startLogin)
-    .catch((loginError) => reportAuthError("login", loginError));
-});
-iam.on("tokenExpired", () => {
-  iam.updateIAMToken()
-    .then(updateUI)
-    .catch((error) => {
-      reportAuthError("expired token", error);
-      return startLogin();
+    const response = await fetch("/tidecloak.json", { cache: "no-store" });
+    if (!response.ok) {
+      setStatus("The public TideCloak adapter could not be loaded.", "error");
+      loginButton.hidden = true;
+      return;
+    }
+
+    const config = await response.json();
+    iam.on("initError", (_event, error) => {
+      initializationError = true;
+      available = false;
+      setStatus(`TideCloak initialization failed: ${error?.message || "check the adapter and callback configuration."}`, "error");
+      updateAuthUi();
     });
+    iam.on("authError", () => {
+      authenticationError = true;
+      setStatus("TideCloak could not complete authentication. Please try again.", "error");
+    });
+    iam.on("tokenExpired", () => {
+      setStatus("Your TideCloak session expired. Sign in again to continue.", "error");
+      updateAuthUi();
+    });
+    const initAuthenticated = await iam.initIAM({
+      ...config,
+      redirectUri: `${window.location.origin}/auth/redirect`,
+      silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
+      useDPoP: { mode: "strict", alg: "ES256" },
+    });
+    if (initializationError) {
+      loginButton.hidden = true;
+      return;
+    }
+    available = true;
+    iam.on("authRefreshSuccess", updateAuthUi);
+    iam.on("authRefreshError", () => {
+      setStatus("Your TideCloak session expired. Sign in again to continue.", "error");
+      updateAuthUi();
+    });
+    iam.on("authSuccess", updateAuthUi);
+    iam.on("logout", updateAuthUi);
+    updateAuthUi();
+    if (!initAuthenticated && !iam.isLoggedIn() && !authenticationError) {
+      setStatus("Sign in with TideCloak to continue.");
+    }
+  } catch (error) {
+    setStatus(`TideCloak initialization failed: ${error.message}`, "error");
+    loginButton.hidden = true;
+  }
+}
+
+export function isAuthenticated() {
+  return available && iam.isLoggedIn();
+}
+
+export async function secureApiFetch(path, options = {}) {
+  if (!isAuthenticated()) throw new Error("Sign in with TideCloak before continuing.");
+  if (typeof iam.secureFetch !== "function") {
+    throw new Error("This TideCloak SDK does not expose secureFetch; protected API calls are disabled.");
+  }
+  return iam.secureFetch(new URL(path, window.location.origin).href, options);
+}
+
+loginButton.addEventListener("click", async () => {
+  if (!available) return;
+  loginButton.disabled = true;
+  setStatus("Opening TideCloak sign-in…");
+  try {
+    await iam.doLogin("/");
+  } catch (error) {
+    setStatus(`Could not start TideCloak sign-in: ${error.message}`, "error");
+  } finally {
+    loginButton.disabled = false;
+  }
 });
 
-await iam.initIAM(initConfig);
+logoutButton.addEventListener("click", async () => {
+  if (!available) return;
+  logoutButton.disabled = true;
+  try {
+    await iam.doLogout();
+  } catch (error) {
+    setStatus(`Could not sign out of TideCloak: ${error.message}`, "error");
+    logoutButton.disabled = false;
+  }
+});
 
-// Initial state
-updateUI();
-
-// Export for use by form.js
-window.__tideIAM = iam;
-window.dispatchEvent(new CustomEvent("tide-auth-ready", {
-  detail: { authenticated: iam.isLoggedIn() },
-}));
+void initializeTide();

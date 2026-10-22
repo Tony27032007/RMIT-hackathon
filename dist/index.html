@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f4f3ef">
+    <meta name="description" content="A family-governed archive for home-security recordings.">
+    <title>HomeLock — Family archive</title>
+    <script type="module" crossorigin src="/assets/home-DjTqIyh5.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/IAMService-CMKxYyWI.js">
+    <link rel="stylesheet" crossorigin href="/assets/home-CjUgcj5T.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="HomeLock home">
+        <span class="brand-mark" aria-hidden="true">H</span>
+        <span>HomeLock</span>
+      </a>
+      <div class="account">
+        <span id="user-info" class="user-info" aria-live="polite"></span>
+        <button id="login-btn" class="button button-dark" type="button" hidden>Sign in</button>
+        <button id="logout-btn" class="button button-quiet" type="button" hidden>Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">A safer place for what matters</p>
+          <h1>Your household’s<br><span>trusted archive.</span></h1>
+          <p class="hero-description">
+            Organise household recordings and collect repository guardian votes through the HomeLock
+            application. These votes are not TideCloak/ORK-enforced security.
+          </p>
+          <p id="auth-status" class="status" role="status" aria-live="polite">
+            Checking TideCloak configuration…
+          </p>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="art-orbit orbit-one"></div>
+          <div class="art-orbit orbit-two"></div>
+          <div class="art-card">
+            <span class="art-lock">⌑</span>
+            <span class="art-line line-long"></span>
+            <span class="art-line line-short"></span>
+            <span class="art-dot"></span>
+          </div>
+          <span class="art-star star-one">✳</span>
+          <span class="art-star star-two">✳</span>
+        </div>
+      </section>
+
+      <section class="safety-banner" aria-labelledby="safety-title">
+        <div class="safety-icon" aria-hidden="true">!</div>
+        <div>
+          <h2 id="safety-title">Demo-only application quorum</h2>
+          <p>
+            HomeLock calculates approval thresholds from its SQLite guardian roster. Membership and
+            deletion require every current guardian; viewing requires every other current guardian.
+            The application server controls stored file keys, so this is not suitable for real
+            security footage.
+          </p>
+          <p id="origin-configuration" class="origin-warning" hidden></p>
+        </div>
+        <span class="gate-badge">Not Tide/ORK enforcement</span>
+      </section>
+
+      <section class="workspace" aria-labelledby="repositories-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Your household space</p>
+            <h2 id="repositories-title">Repositories</h2>
+          </div>
+          <p id="repository-count" class="subtle">Sign in to manage repositories.</p>
+        </div>
+
+        <div id="signed-out-panel" class="empty-state">
+          <div class="empty-icon" aria-hidden="true">⌂</div>
+          <h3>Start with your household</h3>
+          <p>Sign in with TideCloak to create or join a repository.</p>
+        </div>
+
+        <div id="authenticated-panel" hidden>
+          <form id="repository-form" class="create-form">
+            <div class="form-heading">
+              <div>
+                <h3>Create a repository</h3>
+                <p>Your verified TideCloak subject becomes the repository's first guardian.</p>
+              </div>
+            </div>
+            <label for="repository-name">Repository name</label>
+            <input id="repository-name" name="name" maxlength="80" required placeholder="e.g. Willow Street Home">
+            <label for="repository-description">Description <span class="optional">(optional)</span></label>
+            <textarea id="repository-description" name="description" maxlength="500" rows="2" placeholder="A short note about this household archive"></textarea>
+            <div class="form-actions">
+              <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+              <button class="button button-dark" type="submit">Create repository</button>
+            </div>
+          </form>
+          <div id="repository-list" class="repository-list" aria-live="polite"></div>
+          <form id="join-form" class="create-form join-form">
+            <div>
+              <h3>Join a repository</h3>
+              <p>Share the repository ID with someone who wants to ask the guardians to join.</p>
+            </div>
+            <label for="join-repository-id">Repository ID</label>
+            <input id="join-repository-id" type="text" required maxlength="36" placeholder="Repository UUID">
+            <button class="button button-dark" type="submit">Request to join</button>
+            <p id="join-status" class="form-status" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+
+        <section id="repository-detail" class="repository-detail" aria-labelledby="repository-detail-title" hidden>
+          <div class="detail-header">
+            <button id="back-to-repositories" class="button button-quiet" type="button">← All repositories</button>
+            <div>
+              <p class="eyebrow">Household repository</p>
+              <h2 id="repository-detail-title"></h2>
+              <p id="repository-detail-description" class="subtle"></p>
+            </div>
+          </div>
+          <div class="repository-id" aria-label="Repository ID">
+            <span>Repository ID</span>
+            <code id="repository-id-value"></code>
+            <button id="copy-repository-id" class="button button-quiet" type="button">Copy ID</button>
+          </div>
+
+          <div class="detail-safety" role="note">
+            <strong>Application-managed votes only.</strong>
+            <span>Thresholds are computed on the server from the current SQLite guardian roster. Database/server operators can bypass or alter this demo authority.</span>
+          </div>
+
+          <div class="detail-grid">
+            <section class="detail-panel" aria-labelledby="files-heading">
+              <div class="detail-panel-heading">
+                <div>
+                  <p class="eyebrow">Repository contents</p>
+                  <h3 id="files-heading">Files</h3>
+                </div>
+                <span class="card-state">Demo encryption + votes</span>
+              </div>
+              <form id="file-upload-form" class="management-form">
+                <label for="repository-files">Add a video (up to 50 MB)</label>
+                <input id="repository-files" type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime" required>
+                <button class="button button-dark" type="submit">Encrypt and upload</button>
+                <p id="files-lock-note" class="subtle">The browser encrypts each upload. For this demo, the server stores the key and releases it after application votes.</p>
+              </form>
+              <div id="repository-files-list" class="workflow-list" aria-live="polite"></div>
+            </section>
+
+            <section class="detail-panel" aria-labelledby="guardians-heading">
+              <div class="detail-panel-heading">
+                <div>
+                  <p class="eyebrow">Repository access</p>
+                  <h3 id="guardians-heading">Guardians</h3>
+                </div>
+                <span class="card-state">All-guardian approval</span>
+              </div>
+              <form id="guardian-form" class="management-form">
+                <label for="guardian-identity">Invite by TideCloak subject ID</label>
+                <input id="guardian-identity" type="text" placeholder="Exact user ID / subject" required aria-describedby="guardians-lock-note">
+                <button class="button button-dark" type="submit">Submit invite for approval</button>
+                <p id="guardians-lock-note" class="subtle">All current guardians, including the inviter, must approve. The invitee must sign in with this exact subject ID.</p>
+              </form>
+              <div id="repository-guardians-list" class="workflow-list" aria-live="polite"></div>
+              <button id="leave-repository" class="button button-quiet" type="button">Leave repository</button>
+            </section>
+          </div>
+          <section class="detail-panel request-panel" aria-labelledby="requests-heading">
+            <div class="detail-panel-heading">
+              <div>
+                <p class="eyebrow">Server-counted votes</p>
+                <h3 id="requests-heading">Requests and approvals</h3>
+              </div>
+            </div>
+            <p id="workflow-status" class="subtle" role="status" aria-live="polite"></p>
+            <div id="repository-requests-list" class="workflow-list" aria-live="polite"></div>
+          </section>
+        </section>
+      </section>
+
+      <section class="trust-notes" aria-label="Security notes">
+        <article>
+          <span class="note-number">01</span>
+          <h3>Identity stays with TideCloak</h3>
+          <p>HomeLock stores the verified TideCloak subject only to associate repository metadata.</p>
+        </article>
+        <article>
+          <span class="note-number">02</span>
+          <h3>Votes are app-level</h3>
+          <p>SQLite records votes and enforces the demo workflow. They are not independent proof of guardian approval.</p>
+        </article>
+        <article>
+          <span class="note-number">03</span>
+          <h3>Never use real footage</h3>
+          <p>The server stores file keys and can access recordings. Browser encryption here is not a substitute for end-to-end key governance.</p>
+        </article>
+      </section>
+    </main>
+
+    <footer>
+      <span>HomeLock</span>
+      <span>Local development prototype · Not for real security footage</span>
+    </footer>
+
+  </body>
+</html>
