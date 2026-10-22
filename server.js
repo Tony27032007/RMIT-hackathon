@@ -355,14 +355,13 @@ export function createHomeLockServer({ env = process.env, databasePath, adapterP
         if (url.pathname === "/api/profile" && request.method === "GET") {
           const identity = await authenticate(request);
           const profile = database.prepare(`
-            SELECT display_name AS displayName, email,
+            SELECT display_name AS displayName,
               avatar_data IS NOT NULL AS hasAvatar
             FROM user_profiles WHERE user_id = ?
           `).get(identity.userId);
           sendJson(response, 200, {
             userId: identity.userId,
             displayName: profile?.displayName || "",
-            email: profile?.email || "",
             hasAvatar: Boolean(profile?.hasAvatar),
           });
           return;
@@ -373,25 +372,16 @@ export function createHomeLockServer({ env = process.env, databasePath, adapterP
           const identity = await authenticate(request);
           const input = await readJson(request);
           const displayName = typeof input.displayName === "string" ? input.displayName.trim() : null;
-          const email = typeof input.email === "string" ? input.email.trim() : null;
           if (displayName === null || displayName.length > 80) {
             throw requestError(400, "INVALID_PROFILE", "Display name must be 80 characters or fewer.");
           }
-          if (
-            email === null
-            || email.length > 254
-            || (email !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-          ) {
-            throw requestError(400, "INVALID_PROFILE", "Enter a valid email address of 254 characters or fewer.");
-          }
           database.prepare(`
-            INSERT INTO user_profiles (user_id, display_name, email, updated_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO user_profiles (user_id, display_name, updated_at)
+            VALUES (?, ?, ?)
             ON CONFLICT(user_id) DO UPDATE SET
               display_name = excluded.display_name,
-              email = excluded.email,
               updated_at = excluded.updated_at
-          `).run(identity.userId, displayName, email, new Date().toISOString());
+          `).run(identity.userId, displayName, new Date().toISOString());
           sendJson(response, 200, { saved: true });
           return;
         }

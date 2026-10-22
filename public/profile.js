@@ -6,7 +6,6 @@ const workspace = document.getElementById("workspace");
 const profileBack = document.getElementById("profile-back");
 const profileForm = document.getElementById("profile-form");
 const displayNameInput = document.getElementById("profile-display-name");
-const emailInput = document.getElementById("profile-email");
 const userIdInput = document.getElementById("profile-user-id");
 const avatarInput = document.getElementById("avatar-input");
 const avatarImage = document.getElementById("profile-avatar");
@@ -82,8 +81,7 @@ async function openProfile() {
     const response = await profileRequest("/api/profile");
     const profile = await response.json();
     displayNameInput.value = profile.displayName;
-    emailInput.value = profile.email;
-    userIdInput.value = profile.userId;
+    userIdInput.textContent = profile.userId;
     updateAvatarFallback();
     setStatus(profileStatus, "");
     await loadAvatar();
@@ -107,7 +105,6 @@ profileForm.addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         displayName: displayNameInput.value,
-        email: emailInput.value,
       }),
     });
     setStatus(profileStatus, "Your profile is up to date.");

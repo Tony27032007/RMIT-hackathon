@@ -208,24 +208,20 @@ test("authenticated users can create and list their own repositories", async () 
     assert.deepEqual(await initialProfileResponse.json(), {
       userId: subject,
       displayName: "",
-      email: "",
       hasAvatar: false,
     });
     const saveProfileResponse = await authenticatedRequest("/api/profile", "PUT", {
       displayName: "Alex Example",
-      email: "alex@example.com",
     });
     assert.equal(saveProfileResponse.status, 200);
     const savedProfileResponse = await authenticatedRequest("/api/profile", "GET");
     assert.deepEqual(await savedProfileResponse.json(), {
       userId: subject,
       displayName: "Alex Example",
-      email: "alex@example.com",
       hasAvatar: false,
     });
     const invalidProfileResponse = await authenticatedRequest("/api/profile", "PUT", {
-      displayName: "Alex Example",
-      email: "not-an-email",
+      displayName: "x".repeat(81),
     });
     assert.equal(invalidProfileResponse.status, 400);
 

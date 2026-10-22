@@ -9,9 +9,9 @@
       content="A family-governed archive for home-security recordings."
     />
     <title>HomeLock — Family archive</title>
-    <script type="module" crossorigin src="/assets/home-B4Ahgzp6.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/IAMService-BXI1T60g.js">
-    <link rel="stylesheet" crossorigin href="/assets/IAMService-Cul4r-Jx.css">
+    <script type="module" crossorigin src="/assets/home-Cp8dnKcq.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/IAMService-Bo-b1Ddn.js">
+    <link rel="stylesheet" crossorigin href="/assets/IAMService-DztwENMH.css">
   </head>
   <body>
     <header class="topbar">
@@ -345,19 +345,19 @@
       >
         <div class="profile-page-heading">
           <button id="profile-back" class="button button-quiet button-sm" type="button">
-            <span aria-hidden="true">←</span> HomeLock
+            <span aria-hidden="true">←</span> Back to HomeLock
           </button>
-          <div>
+          <div class="profile-title-group">
             <p class="eyebrow">Personal account</p>
             <h2 id="profile-title">Your profile</h2>
-            <p class="subtle">Keep your household account up to date.</p>
+            <p class="subtle">Make your HomeLock account feel like yours.</p>
           </div>
         </div>
 
         <div class="profile-grid">
           <section class="panel profile-photo-card" aria-labelledby="photo-title">
             <h3 id="photo-title">Profile picture</h3>
-            <p class="subtle">A familiar face for your household.</p>
+            <p class="subtle">Help your household recognise you.</p>
             <div class="avatar-frame">
               <img id="profile-avatar" alt="Your profile picture" hidden />
               <span id="avatar-fallback" aria-hidden="true">H</span>
@@ -403,20 +403,9 @@
               />
             </div>
             <div class="field">
-              <label for="profile-email">Email address</label>
-              <input
-                id="profile-email"
-                name="email"
-                type="email"
-                maxlength="254"
-                autocomplete="email"
-                placeholder="you@example.com"
-              />
-            </div>
-            <div class="field">
-              <label for="profile-user-id">TideCloak user ID</label>
-              <input id="profile-user-id" name="userId" readonly />
-              <p class="field-hint">Your verified identity ID cannot be changed here.</p>
+              <span class="field-label">TideCloak user ID</span>
+              <code id="profile-user-id" class="profile-identity-value"></code>
+              <p class="field-hint">Your verified identity is fixed and cannot be changed here.</p>
             </div>
             <div class="profile-save-row">
               <button class="button button-dark" type="submit">Save changes</button>
