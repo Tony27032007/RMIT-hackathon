@@ -5,8 +5,10 @@ const status = document.getElementById("auth-status");
 const loginButton = document.getElementById("login-btn");
 const loginLink = document.getElementById("repository-count");
 const logoutButton = document.getElementById("logout-btn");
+const profileButton = document.getElementById("profile-btn");
 const userInfo = document.getElementById("user-info");
 const heroBanner = document.getElementById("hero-banner");
+const trustNotes = document.getElementById("trust-notes");
 let available = false;
 let initialized = false;
 
@@ -23,9 +25,11 @@ function updateAuthUi() {
   const authenticated = available && iam.isLoggedIn();
   loginButton.hidden = authenticated || !available;
   logoutButton.hidden = !authenticated;
+  profileButton.hidden = !authenticated;
   const userId = authenticated && iam.getValueFromIdToken("sub");
   userInfo.textContent = userId ? `User ID: ${userId}` : "";
   heroBanner.hidden = authenticated;
+  trustNotes.hidden = authenticated;
   if (authenticated) {
     status.textContent = "";
     status.dataset.state = "ready";

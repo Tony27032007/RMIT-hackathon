@@ -19,6 +19,14 @@
       </a>
       <div class="account">
         <span id="user-info" class="user-info" aria-live="polite"></span>
+        <button
+          id="profile-btn"
+          class="button button-quiet profile-nav"
+          type="button"
+          hidden
+        >
+          Profile
+        </button>
         <button id="login-btn" class="button button-dark" type="button" hidden>
           Sign in
         </button>
@@ -61,7 +69,7 @@
         </div>
       </section>
 
-      <section class="workspace" aria-labelledby="repositories-title">
+      <section id="workspace" class="workspace" aria-labelledby="repositories-title">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Your household space</p>
@@ -300,7 +308,7 @@
         </section>
       </section>
 
-      <section class="trust-notes" aria-label="Security notes">
+      <section id="trust-notes" class="trust-notes" aria-label="Security notes">
         <article>
           <span class="note-number">01</span>
           <h3>Identity stays with TideCloak</h3>
@@ -326,6 +334,95 @@
           </p>
         </article>
       </section>
+
+      <section
+        id="profile-page"
+        class="profile-page"
+        aria-labelledby="profile-title"
+        hidden
+      >
+        <div class="profile-page-heading">
+          <button id="profile-back" class="button button-quiet button-sm" type="button">
+            <span aria-hidden="true">←</span> HomeLock
+          </button>
+          <div>
+            <p class="eyebrow">Personal account</p>
+            <h2 id="profile-title">Your profile</h2>
+            <p class="subtle">Keep your household account up to date.</p>
+          </div>
+        </div>
+
+        <div class="profile-grid">
+          <section class="panel profile-photo-card" aria-labelledby="photo-title">
+            <h3 id="photo-title">Profile picture</h3>
+            <p class="subtle">A familiar face for your household.</p>
+            <div class="avatar-frame">
+              <img id="profile-avatar" alt="Your profile picture" hidden />
+              <span id="avatar-fallback" aria-hidden="true">H</span>
+            </div>
+            <div class="profile-photo-actions">
+              <label class="button button-quiet button-sm" for="avatar-input">
+                Choose photo
+                <input
+                  id="avatar-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  hidden
+                />
+              </label>
+              <button
+                id="remove-avatar"
+                class="button button-quiet button-sm"
+                type="button"
+                hidden
+              >
+                Remove
+              </button>
+            </div>
+            <p class="field-hint">JPEG, PNG, or WebP · up to 3 MB</p>
+            <p id="avatar-status" class="form-status" role="status" aria-live="polite"></p>
+          </section>
+
+          <form id="profile-form" class="panel profile-form">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Your details</p>
+                <h3>Personal information</h3>
+              </div>
+            </div>
+            <div class="field">
+              <label for="profile-display-name">Display name</label>
+              <input
+                id="profile-display-name"
+                name="displayName"
+                maxlength="80"
+                autocomplete="name"
+                placeholder="How your household knows you"
+              />
+            </div>
+            <div class="field">
+              <label for="profile-email">Email address</label>
+              <input
+                id="profile-email"
+                name="email"
+                type="email"
+                maxlength="254"
+                autocomplete="email"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div class="field">
+              <label for="profile-user-id">TideCloak user ID</label>
+              <input id="profile-user-id" name="userId" readonly />
+              <p class="field-hint">Your verified identity ID cannot be changed here.</p>
+            </div>
+            <div class="profile-save-row">
+              <button class="button button-dark" type="submit">Save changes</button>
+              <p id="profile-status" class="form-status" role="status" aria-live="polite"></p>
+            </div>
+          </form>
+        </div>
+      </section>
     </main>
 
     <footer>
@@ -334,5 +431,6 @@
     </footer>
 
     <script type="module" src="/app.js"></script>
+    <script type="module" src="/profile.js"></script>
   </body>
 </html>

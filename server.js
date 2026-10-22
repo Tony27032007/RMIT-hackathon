@@ -144,13 +144,17 @@ async function readJson(request) {
   }
 }
 
-async function readBinary(request, maxBytes) {
+async function readBinary(
+  request,
+  maxBytes,
+  tooLargeMessage = "The encrypted file exceeds the 50 MB limit.",
+) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
     if (size > maxBytes) {
-      throw requestError(413, "UPLOAD_TOO_LARGE", "The encrypted file exceeds the 50 MB limit.");
+      throw requestError(413, "UPLOAD_TOO_LARGE", tooLargeMessage);
     }
     chunks.push(chunk);
   }
@@ -346,6 +350,114 @@ export function createHomeLockServer({ env = process.env, databasePath, adapterP
             gates: config.gates,
           });
           return;
+        }
+
+        if (url.pathname === "/api/profile" && request.method === "GET") {
+          const identity = await authenticate(request);
+          const profile = database.prepare(`
+            SELECT display_name AS displayName, email,
+              avatar_data IS NOT NULL AS hasAvatar
+            FROM user_profiles WHERE user_id = ?
+          `).get(identity.userId);
+          sendJson(response, 200, {
+            userId: identity.userId,
+            displayName: profile?.displayName || "",
+            email: profile?.email || "",
+            hasAvatar: Boolean(profile?.hasAvatar),
+          });
+          return;
+        }
+
+        if (url.pathname === "/api/profile" && request.method === "PUT") {
+          requireSameOrigin(request, config.appOrigin);
+          const identity = await authenticate(request);
+          const input = await readJson(request);
+          const displayName = typeof input.displayName === "string" ? input.displayName.trim() : null;
+          const email = typeof input.email === "string" ? input.email.trim() : null;
+          if (displayName === null || displayName.length > 80) {
+            throw requestError(400, "INVALID_PROFILE", "Display name must be 80 characters or fewer.");
+          }
+          if (
+            email === null
+            || email.length > 254
+            || (email !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+          ) {
+            throw requestError(400, "INVALID_PROFILE", "Enter a valid email address of 254 characters or fewer.");
+          }
+          database.prepare(`
+            INSERT INTO user_profiles (user_id, display_name, email, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+              display_name = excluded.display_name,
+              email = excluded.email,
+              updated_at = excluded.updated_at
+          `).run(identity.userId, displayName, email, new Date().toISOString());
+          sendJson(response, 200, { saved: true });
+          return;
+        }
+
+        if (url.pathname === "/api/profile/avatar") {
+          const identity = await authenticate(request);
+          if (request.method === "GET") {
+            const profile = database.prepare(`
+              SELECT avatar_data AS data, avatar_content_type AS contentType
+              FROM user_profiles WHERE user_id = ? AND avatar_data IS NOT NULL
+            `).get(identity.userId);
+            if (!profile) {
+              sendJson(response, 404, { error: "NOT_FOUND", message: "No profile picture has been uploaded." });
+              return;
+            }
+            response.writeHead(200, {
+              "Content-Type": profile.contentType,
+              "Content-Length": profile.data.length,
+              "Cache-Control": "no-store",
+            });
+            response.end(profile.data);
+            return;
+          }
+          if (request.method === "PUT") {
+            requireSameOrigin(request, config.appOrigin);
+            const contentType = request.headers["content-type"]?.split(";")[0].trim().toLowerCase();
+            const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+            if (!allowedTypes.has(contentType)) {
+              throw requestError(415, "UNSUPPORTED_IMAGE_TYPE", "Use a JPEG, PNG, or WebP image.");
+            }
+            const data = await readBinary(
+              request,
+              3 * 1024 * 1024,
+              "The profile picture must be 3 MB or smaller.",
+            );
+            const validSignature = contentType === "image/png"
+              ? data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+              : contentType === "image/jpeg"
+                ? data.length >= 3 && data[0] === 255 && data[1] === 216 && data[2] === 255
+                : data.length >= 12
+                  && data.toString("ascii", 0, 4) === "RIFF"
+                  && data.toString("ascii", 8, 12) === "WEBP";
+            if (!validSignature) {
+              throw requestError(400, "INVALID_IMAGE", "The uploaded file is not a valid JPEG, PNG, or WebP image.");
+            }
+            database.prepare(`
+              INSERT INTO user_profiles (user_id, avatar_data, avatar_content_type, updated_at)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT(user_id) DO UPDATE SET
+                avatar_data = excluded.avatar_data,
+                avatar_content_type = excluded.avatar_content_type,
+                updated_at = excluded.updated_at
+            `).run(identity.userId, data, contentType, new Date().toISOString());
+            sendJson(response, 200, { saved: true });
+            return;
+          }
+          if (request.method === "DELETE") {
+            requireSameOrigin(request, config.appOrigin);
+            database.prepare(`
+              UPDATE user_profiles
+              SET avatar_data = NULL, avatar_content_type = NULL, updated_at = ?
+              WHERE user_id = ?
+            `).run(new Date().toISOString(), identity.userId);
+            sendJson(response, 200, { removed: true });
+            return;
+          }
         }
 
         const leaveMatch = /^\/api\/repositories\/([a-f0-9-]{36})\/members\/me$/.exec(url.pathname);

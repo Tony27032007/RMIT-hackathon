@@ -70,10 +70,12 @@ test("configured OAuth callback path serves the built callback page", async () =
 });
 
 test("repository endpoints fail closed without configured Tide identity verification", async () => {
-  const response = await fetch(`${baseUrl}/api/repositories`);
-  const body = await response.json();
-  assert.equal(response.status, 503);
-  assert.equal(body.error, "AUTH_NOT_CONFIGURED");
+  for (const path of ["/api/repositories", "/api/profile", "/api/profile/avatar"]) {
+    const response = await fetch(`${baseUrl}${path}`);
+    const body = await response.json();
+    assert.equal(response.status, 503);
+    assert.equal(body.error, "AUTH_NOT_CONFIGURED");
+  }
 });
 
 test("protected workflows still require verified Tide authentication", async () => {
@@ -148,7 +150,7 @@ test("authenticated users can create and list their own repositories", async () 
       .setExpirationTime("5m")
       .sign(signingPrivateKey);
 
-    async function authenticatedRequest(path, method, body) {
+    async function authenticatedRequest(path, method, body, contentType) {
       const proof = await new SignJWT({
         jti: randomUUID(),
         htm: method,
@@ -168,9 +170,9 @@ test("authenticated users can create and list their own repositories", async () 
           authorization: `DPoP ${token}`,
           dpop: proof,
           origin: appOrigin,
-          ...(body ? { "content-type": "application/json" } : {}),
+          ...(body ? { "content-type": contentType || "application/json" } : {}),
         },
-        ...(body ? { body: JSON.stringify(body) } : {}),
+        ...(body ? { body: Buffer.isBuffer(body) ? body : JSON.stringify(body) } : {}),
       });
     }
 
@@ -200,6 +202,55 @@ test("authenticated users can create and list their own repositories", async () 
     assert.equal(detail.gates.fileUpload, "application-quorum");
     assert.equal(detail.gates.fileRemoval, "application-quorum");
     assert.equal(detail.gates.guardianMembership, "application-quorum");
+
+    const initialProfileResponse = await authenticatedRequest("/api/profile", "GET");
+    assert.equal(initialProfileResponse.status, 200);
+    assert.deepEqual(await initialProfileResponse.json(), {
+      userId: subject,
+      displayName: "",
+      email: "",
+      hasAvatar: false,
+    });
+    const saveProfileResponse = await authenticatedRequest("/api/profile", "PUT", {
+      displayName: "Alex Example",
+      email: "alex@example.com",
+    });
+    assert.equal(saveProfileResponse.status, 200);
+    const savedProfileResponse = await authenticatedRequest("/api/profile", "GET");
+    assert.deepEqual(await savedProfileResponse.json(), {
+      userId: subject,
+      displayName: "Alex Example",
+      email: "alex@example.com",
+      hasAvatar: false,
+    });
+    const invalidProfileResponse = await authenticatedRequest("/api/profile", "PUT", {
+      displayName: "Alex Example",
+      email: "not-an-email",
+    });
+    assert.equal(invalidProfileResponse.status, 400);
+
+    const pngHeader = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pWQAAAAASUVORK5CYII=",
+      "base64",
+    );
+    const uploadAvatarResponse = await authenticatedRequest(
+      "/api/profile/avatar",
+      "PUT",
+      pngHeader,
+      "image/png",
+    );
+    assert.equal(uploadAvatarResponse.status, 200);
+    const getAvatarResponse = await authenticatedRequest("/api/profile/avatar", "GET");
+    assert.equal(getAvatarResponse.status, 200);
+    assert.equal(getAvatarResponse.headers.get("content-type"), "image/png");
+    assert.deepEqual(Buffer.from(await getAvatarResponse.arrayBuffer()), pngHeader);
+    const removeAvatarResponse = await authenticatedRequest(
+      "/api/profile/avatar",
+      "DELETE",
+    );
+    assert.equal(removeAvatarResponse.status, 200);
+    const removedAvatarResponse = await authenticatedRequest("/api/profile/avatar", "GET");
+    assert.equal(removedAvatarResponse.status, 404);
 
     const otherRepositoryId = randomUUID();
     authenticatedApp.database.prepare(`

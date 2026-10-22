@@ -35,7 +35,7 @@ The SQLite database is created at `data/homelock.sqlite`. Encrypted video files 
 3. Register `${APP_ORIGIN}/auth/redirect` and the app origin in TideCloak. The server provides `/auth/redirect`, `/silent-check-sso.html`, and the DPoP relay.
 4. The API verifies the access-token signature, issuer, expiry, subject, authorized party, and configured audience. It also verifies the DPoP signature, token binding, method, URL, time window, and replay identifier.
 
-HomeLock uses the verified OIDC `sub` claim as its application user ID. SQLite stores only app-specific repository membership and workflow information; TideCloak remains the identity provider.
+HomeLock uses the verified OIDC `sub` claim as its application user ID. TideCloak remains the identity provider; optional display names, email addresses, and profile pictures are stored per user in SQLite. Profile pictures are limited to 3 MB and JPEG, PNG, or WebP formats.
 
 ## Application-managed guardian quorum
 
