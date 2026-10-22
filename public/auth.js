@@ -35,6 +35,7 @@ function updateUI() {
   } else {
     userInfo.textContent = "";
   }
+  window.dispatchEvent(new CustomEvent("tide-auth-updated", { detail: { authenticated } }));
 }
 
 loginBtn.addEventListener("click", () => {
@@ -56,3 +57,6 @@ updateUI();
 
 // Export for use by form.js
 window.__tideIAM = iam;
+window.dispatchEvent(new CustomEvent("tide-auth-ready", {
+  detail: { authenticated: iam.isAuthenticated() },
+}));

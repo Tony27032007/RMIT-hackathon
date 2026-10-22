@@ -151,6 +151,19 @@ input:focus-visible {
   font-weight: 700;
 }
 
+.family-switcher-copy select {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .family-switcher-copy small {
   color: var(--muted);
   font-size: 11px;
@@ -1133,6 +1146,30 @@ h1 {
   border: 1px solid #e7ebe7;
   border-radius: 10px;
   background: #fff;
+}
+
+.empty-state,
+.empty-repository {
+  padding: 22px;
+  border: 1px dashed #dce4dc;
+  border-radius: 10px;
+  color: #748077;
+  background: #fbfcfa;
+  font-size: 12px;
+}
+
+.empty-repository {
+  margin-top: 20px;
+}
+
+.empty-repository h2 {
+  margin: 0 0 8px;
+  color: #3e4942;
+  font-size: 18px;
+}
+
+.empty-repository p {
+  margin: 0 0 16px;
 }
 
 .guardian-row,
