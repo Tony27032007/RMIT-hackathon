@@ -21,7 +21,7 @@ sudo docker run \
   tideorg/tidecloak-dev:latest
 
 npm install
-npm run dev
+npm start server
 ```
 
 Open [http://localhost:3000](http://localhost:3000). Without a TideCloak adapter, sign-in and protected API requests remain unavailable; the app does not create preview identities.
