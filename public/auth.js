@@ -3,8 +3,10 @@ import { IAMService } from "@tidecloak/js";
 const iam = IAMService;
 const status = document.getElementById("auth-status");
 const loginButton = document.getElementById("login-btn");
+const loginLink = document.getElementById("repository-count");
 const logoutButton = document.getElementById("logout-btn");
 const userInfo = document.getElementById("user-info");
+const heroBanner = document.getElementById("hero-banner");
 let available = false;
 let initialized = false;
 
@@ -21,9 +23,13 @@ function updateAuthUi() {
   const authenticated = available && iam.isLoggedIn();
   loginButton.hidden = authenticated || !available;
   logoutButton.hidden = !authenticated;
-  const username = authenticated && iam.getValueFromIdToken("preferred_username");
-  userInfo.textContent = username ? `Signed in as ${username}` : authenticated ? "Signed in" : "";
-  if (authenticated) setStatus("Signed in with TideCloak.");
+  const userId = authenticated && iam.getValueFromIdToken("sub");
+  userInfo.textContent = userId ? `User ID: ${userId}` : "";
+  heroBanner.hidden = authenticated;
+  if (authenticated) {
+    status.textContent = "";
+    status.dataset.state = "ready";
+  }
   notifyChange();
 }
 
@@ -84,7 +90,20 @@ export async function initializeTide() {
     iam.on("logout", updateAuthUi);
     updateAuthUi();
     if (!initAuthenticated && !iam.isLoggedIn() && !authenticationError) {
-      setStatus("Sign in with TideCloak to continue.");
+      status.innerHTML = '<a id="login-link" href=""> Sign in with TideCloak to continue.</a>';
+      status.dataset.state = "ready";
+      document.getElementById("login-link").addEventListener("click", async () => {
+        if (!available) return;
+        loginLink.disabled = true;
+        setStatus("Opening TideCloak sign-in…");
+        try {
+          await iam.doLogin("/");
+        } catch (error) {
+          setStatus(`Could not start TideCloak sign-in: ${error.message}`, "error");
+        } finally {
+          loginLink.disabled = false;
+        }
+      });
     }
   } catch (error) {
     setStatus(`TideCloak initialization failed: ${error.message}`, "error");
@@ -114,6 +133,19 @@ loginButton.addEventListener("click", async () => {
     setStatus(`Could not start TideCloak sign-in: ${error.message}`, "error");
   } finally {
     loginButton.disabled = false;
+  }
+});
+
+loginLink.addEventListener("click", async () => {
+  if (!available) return;
+  loginLink.disabled = true;
+  setStatus("Opening TideCloak sign-in…");
+  try {
+    await iam.doLogin("/");
+  } catch (error) {
+    setStatus(`Could not start TideCloak sign-in: ${error.message}`, "error");
+  } finally {
+    loginLink.disabled = false;
   }
 });
 

@@ -75,8 +75,11 @@ footer {
 }
 
 .user-info {
+  max-width: 420px;
   color: var(--muted);
   font-size: 13px;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .button {
@@ -734,7 +737,8 @@ footer {
   }
 
   .user-info {
-    display: none;
+    max-width: 42vw;
+    font-size: 10px;
   }
 
   .hero {
