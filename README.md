@@ -1,31 +1,43 @@
 [![Built with TideCloak](https://tide.org/badges/built-with-tidecloak.svg)](https://tide.org/tidecloak?utm_source=github&utm_medium=readme&utm_campaign=unlocked)
 
-## Project overview
+# Hearth — Family video archive
 
-A private repository for home security camera recordings, governed by the adults in a family through emergent authority.
+A family-governed repository concept for home security camera recordings. Adult family members subscribe as guardians and share authority over their family archive.
 
-Built with [TideCloak](https://tide.org/tidecloak?utm_source=github&utm_medium=readme&utm_campaign=unlocked).
+## Product idea
 
-### 1. Vision & originality
+- Adults in a family are linked subscribers and guardians of a repository.
+- Video footage can be submitted to a repository for family members to retain and review.
+- Every current subscriber must approve a new user's request before that user can join.
+- Authority is shared rather than resting with one account. The concept uses guardian-linked key fragments and emergent authority.
 
-Create a secure repository for recordings from a family's home security cameras. Rather than giving one person permanent, unilateral control, the repository uses emergent authority: trusted adult family members act as guardians, with key fragments linked to their subscribed accounts and the repository. Guardians can collectively govern access to sensitive recordings.
+The web interface is built with plain HTML, CSS, and JavaScript.
 
-### 2. Trust constraint insight
+## TideCloak fit and limitations
 
-Home camera footage can reveal intimate details about a family's routines and private life. A single account or administrator becoming compromised—or misusing their access—can expose the entire archive. Requiring the participation of multiple adult guardians makes authority shared and reduces reliance on any one account or person.
+TideCloak provides identity, threshold cryptography, shared policy-governed encryption, and quorum-governed identity administration. It does **not** provide this video repository or the application's unanimous-subscriber membership workflow out of the box. The application would need its own backend, repository model, membership and approval rules, and secure video storage.
 
-### 3. Value & impact
+Shared encryption can be built using TideCloak's policy-based encryption and Forseti authorization. The exact policy for subscriber membership and key-fragment governance must be designed and verified. A custom Forseti contract may be needed for the desired rules; contract deployment is not self-service and is currently handled by the Tide team for test-network evaluation. TideCloak's IGA quorum governs supported identity-administration changes; it is not automatically the approval workflow for joining an application repository.
 
-Families benefit from having a shared place to retain and review security recordings without making one family member the sole authority over them. Adult family members can link their subscribed accounts as guardians of the repository and share responsibility for access to its recordings.
+## Current prototype
 
-### 4. Why TideCloak matters
+The current site is a browser-only interface demonstration:
 
-The application will use services from the TideCloak MCP server to implement emergent authority. TideCloak provides the identity and governance foundation for linking adult guardians' accounts to the repository and coordinating their key-fragment-based authority.
+- The sample recordings and guardian accounts are illustrative.
+- Selected video files are previewed locally in the browser and are not uploaded or persisted.
+- Invitation and approval interactions are local UI demonstrations, not authenticated subscriber consent.
+- There is no backend, secure video storage, or server-side authorization yet.
+- The TideCloak starter auth module is included, but a configured adapter and successful real login have not been verified.
 
-### 5. Prototype & storytelling
+**Do not use this prototype to store real footage or rely on it to enforce access control.** A production version needs a backend that verifies Tide tokens and DPoP proofs, plus authorized and encrypted storage for video recordings.
 
-<!-- What does your prototype demonstrate today? Describe the key interaction judges should look for. -->
+## Run locally
 
-## Setup
+Install the package dependencies, then start the local development server:
 
-<!-- How to install and run the prototype. -->
+```bash
+npm install
+npm run dev
+```
+
+Open the local URL printed by the development server. Without `public/tidecloak.json`, the site opens in clearly labeled preview mode. The local server also serves Tide's DPoP relay at its required routed URL with the required headers. A production host needs equivalent rewrite and header configuration.

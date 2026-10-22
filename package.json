@@ -1,0 +1,11 @@
+{
+  "name": "family-watch",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node server.mjs"
+  },
+  "dependencies": {
+    "@tidecloak/js": "0.14.17"
+  }
+}
